@@ -1,3 +1,6 @@
+All I did was edit 1 file to make the QEMU Gtk window run at 60 FPS.  You can use it if you want
+
+______________________________________________________________________________________________________________-
 ===========
 QEMU README
 ===========

@@ -1,4 +1,9 @@
-All I did was edit 1 file to make the QEMU Gtk window run at 60 FPS.  You can use it if you want
+My Version Of QEMU, Originally this was only meant to make the GTK Window Run at 60hz but now it does a lot of other stuff
+
+Features
+
+GTK Window At 60HZ instead of 30
+CPU Model Info Changed to Intel Core Processors 
 
 ______________________________________________________________________________________________________________-
 ===========

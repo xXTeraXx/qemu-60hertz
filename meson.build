@@ -40,12 +40,15 @@ config_host_data = configuration_data()
 genh = []
 
 target_dirs = config_host['TARGET_DIRS'].split()
-have_user = false
+have_linux_user = false
+have_bsd_user = false
 have_system = false
 foreach target : target_dirs
-  have_user = have_user or target.endswith('-user')
+  have_linux_user = have_linux_user or target.endswith('linux-user')
+  have_bsd_user = have_bsd_user or target.endswith('bsd-user')
   have_system = have_system or target.endswith('-softmmu')
 endforeach
+have_user = have_linux_user or have_bsd_user
 have_tools = 'CONFIG_TOOLS' in config_host
 have_block = have_system or have_tools
 
@@ -1527,6 +1530,12 @@ config_host_data.set('HAVE_COPY_FILE_RANGE', cc.has_function('copy_file_range'))
 config_host_data.set('HAVE_OPENPTY', cc.has_function('openpty', dependencies: util))
 config_host_data.set('HAVE_STRCHRNUL', cc.has_function('strchrnul'))
 config_host_data.set('HAVE_SYSTEM_FUNCTION', cc.has_function('system', prefix: '#include <stdlib.h>'))
+if rdma.found()
+  config_host_data.set('HAVE_IBV_ADVISE_MR',
+                       cc.has_function('ibv_advise_mr',
+                                       args: config_host['RDMA_LIBS'].split(),
+                                       prefix: '#include <infiniband/verbs.h>'))
+endif
 
 # has_header_symbol
 config_host_data.set('CONFIG_BYTESWAP_H',
@@ -2595,10 +2604,11 @@ subdir('bsd-user')
 subdir('linux-user')
 subdir('ebpf')
 
-bsd_user_ss.add(files('gdbstub.c'))
+common_ss.add(libbpf)
+
 specific_ss.add_all(when: 'CONFIG_BSD_USER', if_true: bsd_user_ss)
 
-linux_user_ss.add(files('gdbstub.c', 'thunk.c'))
+linux_user_ss.add(files('thunk.c'))
 specific_ss.add_all(when: 'CONFIG_LINUX_USER', if_true: linux_user_ss)
 
 # needed for fuzzing binaries

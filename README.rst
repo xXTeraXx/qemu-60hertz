@@ -1,4 +1,4 @@
-My Version Of QEMU, Originally this was only meant to make the GTK Window Run at 60hz but now it does a lot of other stuff
+My Version Of QEMU, Originally this was only meant to make the GTK Window Run at 60hz but now it also sets CPU model info more accurately for better compatiblity.  Will be upstreamed into the Tucana Repos in prerelease-4 
 
 Features
 

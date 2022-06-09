@@ -237,7 +237,6 @@
 #                   information (since 1.7)
 #
 # Since: 1.3
-#
 ##
 { 'struct': 'ImageInfo',
   'data': {'filename': 'str', 'format': 'str', '*dirty-flag': 'bool',
@@ -288,7 +287,6 @@
 #                       supports it
 #
 # Since: 1.4
-#
 ##
 { 'struct': 'ImageCheck',
   'data': {'filename': 'str', 'format': 'str', 'check-errors': 'int',
@@ -328,7 +326,6 @@
 # @filename: filename that is referred to by @offset
 #
 # Since: 2.6
-#
 ##
 { 'struct': 'MapEntry',
   'data': {'start': 'int', 'length': 'int', 'data': 'bool',
@@ -340,9 +337,9 @@
 #
 # Cache mode information for a block device
 #
-# @writeback:   true if writeback mode is enabled
-# @direct:      true if the host page cache is bypassed (O_DIRECT)
-# @no-flush:    true if flush requests are ignored for the device
+# @writeback: true if writeback mode is enabled
+# @direct: true if the host page cache is bypassed (O_DIRECT)
+# @no-flush: true if flush requests are ignored for the device
 #
 # Since: 2.3
 ##
@@ -445,7 +442,6 @@
 #                 has one or more dirty bitmaps) (Since 4.2)
 #
 # Since: 0.14
-#
 ##
 { 'struct': 'BlockDeviceInfo',
   'data': { 'file': 'str', '*node-name': 'str', 'ro': 'bool', 'drv': 'str',
@@ -491,11 +487,11 @@
 # @granularity: granularity of the dirty bitmap in bytes (since 1.4)
 #
 # @recording: true if the bitmap is recording new writes from the guest.
-#             Replaces `active` and `disabled` statuses. (since 4.0)
+#             Replaces ``active`` and ``disabled`` statuses. (since 4.0)
 #
 # @busy: true if the bitmap is in-use by some operation (NBD or jobs)
 #        and cannot be modified via QMP or used by another operation.
-#        Replaces `locked` and `frozen` statuses. (since 4.0)
+#        Replaces ``locked`` and ``frozen`` statuses. (since 4.0)
 #
 # @persistent: true if the bitmap was stored on disk, is scheduled to be stored
 #              on disk, or both. (since 4.0)
@@ -608,7 +604,7 @@
 # @inserted: @BlockDeviceInfo describing the device if media is
 #            present
 #
-# Since:  0.14
+# Since: 0.14
 ##
 { 'struct': 'BlockInfo',
   'data': {'device': 'str', '*qdev': 'str', 'type': 'str', 'removable': 'bool',
@@ -743,7 +739,6 @@
 ##
 { 'command': 'query-block', 'returns': ['BlockInfo'] }
 
-
 ##
 # @BlockDeviceTimedStats:
 #
@@ -800,9 +795,9 @@
 #
 # Statistics of a virtual block device or a block backing device.
 #
-# @rd_bytes:      The number of bytes read by the device.
+# @rd_bytes: The number of bytes read by the device.
 #
-# @wr_bytes:      The number of bytes written by the device.
+# @wr_bytes: The number of bytes written by the device.
 #
 # @unmap_bytes: The number of bytes unmapped by the device (Since 4.2)
 #
@@ -975,7 +970,7 @@
 # @qdev: The qdev ID, or if no ID is assigned, the QOM path of the block
 #        device. (since 3.0)
 #
-# @stats:  A @BlockDeviceStats for the device.
+# @stats: A @BlockDeviceStats for the device.
 #
 # @driver-specific: Optional driver-specific stats. (Since 4.2)
 #
@@ -1280,7 +1275,7 @@
 #
 # @node-name: graph node name to get the image resized (Since 2.0)
 #
-# @size:  new image size in bytes
+# @size: new image size in bytes
 #
 # Returns: - nothing on success
 #          - If @device is not a valid block device, DeviceNotFound
@@ -1438,6 +1433,9 @@
 #
 # @x-perf: Performance options. (Since 6.0)
 #
+# Features:
+# @unstable: Member @x-perf is experimental.
+#
 # Note: @on-source-error and @on-target-error only affect background
 #       I/O.  If an error occurs during a guest write request, the device's
 #       rerror/werror actions will be used.
@@ -1452,7 +1450,9 @@
             '*on-source-error': 'BlockdevOnError',
             '*on-target-error': 'BlockdevOnError',
             '*auto-finalize': 'bool', '*auto-dismiss': 'bool',
-            '*filter-node-name': 'str', '*x-perf': 'BackupPerf'  } }
+            '*filter-node-name': 'str',
+            '*x-perf': { 'type': 'BackupPerf',
+                         'features': [ 'unstable' ] } } }
 
 ##
 # @DriveBackup:
@@ -1510,7 +1510,6 @@
 ##
 { 'command': 'blockdev-snapshot-sync',
   'data': 'BlockdevSnapshotSync' }
-
 
 ##
 # @blockdev-snapshot:
@@ -1704,6 +1703,9 @@
 # The operation can be stopped before it has completed using the
 # block-job-cancel command.
 #
+# Features:
+# @deprecated: This command is deprecated. Use @blockdev-backup instead.
+#
 # Returns: - nothing on success
 #          - If @device is not a valid block device, GenericError
 #
@@ -1719,7 +1721,7 @@
 #
 ##
 { 'command': 'drive-backup', 'boxed': true,
-  'data': 'DriveBackup' }
+  'data': 'DriveBackup', 'features': ['deprecated'] }
 
 ##
 # @blockdev-backup:
@@ -1736,6 +1738,7 @@
 # Since: 2.3
 #
 # Example:
+#
 # -> { "execute": "blockdev-backup",
 #      "arguments": { "device": "src-id",
 #                     "sync": "full",
@@ -1745,7 +1748,6 @@
 ##
 { 'command': 'blockdev-backup', 'boxed': true,
   'data': 'BlockdevBackup' }
-
 
 ##
 # @query-named-block-nodes:
@@ -1768,6 +1770,7 @@
 #                    "file":"disks/test.qcow2",
 #                    "node-name": "my-node",
 #                    "backing_file_depth":1,
+#                    "detect_zeroes":"off",
 #                    "bps":1000000,
 #                    "bps_rd":0,
 #                    "bps_wr":0,
@@ -1870,14 +1873,11 @@
 #
 # @resize: This permission is required to change the size of a block node.
 #
-# @graph-mod: This permission is required to change the node that this
-#             BdrvChild points to.
-#
 # Since: 4.0
 ##
 { 'enum': 'BlockPermission',
-  'data': [ 'consistent-read', 'write', 'write-unchanged', 'resize',
-            'graph-mod' ] }
+  'data': [ 'consistent-read', 'write', 'write-unchanged', 'resize' ] }
+
 ##
 # @XDbgBlockGraphEdge:
 #
@@ -1916,9 +1916,13 @@
 #
 # Get the block graph.
 #
+# Features:
+# @unstable: This command is meant for debugging.
+#
 # Since: 4.0
 ##
-{ 'command': 'x-debug-query-block-graph', 'returns': 'XDbgBlockGraph' }
+{ 'command': 'x-debug-query-block-graph', 'returns': 'XDbgBlockGraph',
+  'features': [ 'unstable' ] }
 
 ##
 # @drive-mirror:
@@ -1956,8 +1960,8 @@
 # @job-id: identifier for the newly-created block job. If
 #          omitted, the device name will be used. (Since 2.7)
 #
-# @device:  the device name or node-name of a root node whose writes should be
-#           mirrored.
+# @device: the device name or node-name of a root node whose writes should be
+#          mirrored.
 #
 # @target: the target of the new image. If the file exists, or if it
 #          is a device, the existing file/device will be used as the new
@@ -1977,7 +1981,7 @@
 # @mode: whether and how QEMU should create a new image, default is
 #        'absolute-paths'.
 #
-# @speed:  the maximum speed, in bytes per second
+# @speed: the maximum speed, in bytes per second
 #
 # @sync: what parts of the disk image should be copied to the destination
 #        (all the disk, only the sectors allocated in the topmost image, or
@@ -1998,6 +2002,7 @@
 # @on-target-error: the action to take on an error on the target,
 #                   default 'report' (no limitations, since this applies to
 #                   a different block device than @device).
+#
 # @unmap: Whether to try to unmap target sectors where source has
 #         only zero. If true, and target unallocated sectors will read as zero,
 #         target image sectors will be unmapped; otherwise, zeroes will be
@@ -2019,6 +2024,7 @@
 #                When true, this job will automatically disappear from the query
 #                list without user intervention.
 #                Defaults to true. (Since 3.1)
+#
 # Since: 1.3
 ##
 { 'struct': 'DriveMirror',
@@ -2069,7 +2075,7 @@
             '*persistent': 'bool', '*disabled': 'bool' } }
 
 ##
-# @BlockDirtyBitmapMergeSource:
+# @BlockDirtyBitmapOrStr:
 #
 # @local: name of the bitmap, attached to the same node as target bitmap.
 #
@@ -2077,7 +2083,7 @@
 #
 # Since: 4.1
 ##
-{ 'alternate': 'BlockDirtyBitmapMergeSource',
+{ 'alternate': 'BlockDirtyBitmapOrStr',
   'data': { 'local': 'str',
             'external': 'BlockDirtyBitmap' } }
 
@@ -2096,7 +2102,7 @@
 ##
 { 'struct': 'BlockDirtyBitmapMerge',
   'data': { 'node': 'str', 'target': 'str',
-            'bitmaps': ['BlockDirtyBitmapMergeSource'] } }
+            'bitmaps': ['BlockDirtyBitmapOrStr'] } }
 
 ##
 # @block-dirty-bitmap-add:
@@ -2257,6 +2263,9 @@
 #
 # Get bitmap SHA256.
 #
+# Features:
+# @unstable: This command is meant for debugging.
+#
 # Returns: - BlockDirtyBitmapSha256 on success
 #          - If @node is not a valid block device, DeviceNotFound
 #          - If @name is not found or if hashing has failed, GenericError with an
@@ -2265,7 +2274,8 @@
 # Since: 2.10
 ##
 { 'command': 'x-debug-block-dirty-bitmap-sha256',
-  'data': 'BlockDirtyBitmap', 'returns': 'BlockDirtyBitmapSha256' }
+  'data': 'BlockDirtyBitmap', 'returns': 'BlockDirtyBitmapSha256',
+  'features': [ 'unstable' ] }
 
 ##
 # @blockdev-mirror:
@@ -2286,7 +2296,7 @@
 #            broken Quorum files.  By default, @device is replaced, although
 #            implicitly created filters on it are kept.
 #
-# @speed:  the maximum speed, in bytes per second
+# @speed: the maximum speed, in bytes per second
 #
 # @sync: what parts of the disk image should be copied to the destination
 #        (all the disk, only the sectors allocated in the topmost image, or
@@ -2328,6 +2338,7 @@
 #                When true, this job will automatically disappear from the query
 #                list without user intervention.
 #                Defaults to true. (Since 3.1)
+#
 # Returns: nothing on success.
 #
 # Since: 2.6
@@ -2495,27 +2506,57 @@
 #
 # Properties for throttle-group objects.
 #
-# The options starting with x- are aliases for the same key without x- in
-# the @limits object. As indicated by the x- prefix, this is not a stable
-# interface and may be removed or changed incompatibly in the future. Use
-# @limits for a supported stable interface.
-#
 # @limits: limits to apply for this throttle group
+#
+# Features:
+# @unstable: All members starting with x- are aliases for the same key
+#            without x- in the @limits object.  This is not a stable
+#            interface and may be removed or changed incompatibly in
+#            the future.  Use @limits for a supported stable
+#            interface.
 #
 # Since: 2.11
 ##
 { 'struct': 'ThrottleGroupProperties',
   'data': { '*limits': 'ThrottleLimits',
-            '*x-iops-total' : 'int', '*x-iops-total-max' : 'int',
-            '*x-iops-total-max-length' : 'int', '*x-iops-read' : 'int',
-            '*x-iops-read-max' : 'int', '*x-iops-read-max-length' : 'int',
-            '*x-iops-write' : 'int', '*x-iops-write-max' : 'int',
-            '*x-iops-write-max-length' : 'int', '*x-bps-total' : 'int',
-            '*x-bps-total-max' : 'int', '*x-bps-total-max-length' : 'int',
-            '*x-bps-read' : 'int', '*x-bps-read-max' : 'int',
-            '*x-bps-read-max-length' : 'int', '*x-bps-write' : 'int',
-            '*x-bps-write-max' : 'int', '*x-bps-write-max-length' : 'int',
-            '*x-iops-size' : 'int' } }
+            '*x-iops-total': { 'type': 'int',
+                               'features': [ 'unstable' ] },
+            '*x-iops-total-max': { 'type': 'int',
+                                   'features': [ 'unstable' ] },
+            '*x-iops-total-max-length': { 'type': 'int',
+                                          'features': [ 'unstable' ] },
+            '*x-iops-read': { 'type': 'int',
+                              'features': [ 'unstable' ] },
+            '*x-iops-read-max': { 'type': 'int',
+                                  'features': [ 'unstable' ] },
+            '*x-iops-read-max-length': { 'type': 'int',
+                                         'features': [ 'unstable' ] },
+            '*x-iops-write': { 'type': 'int',
+                               'features': [ 'unstable' ] },
+            '*x-iops-write-max': { 'type': 'int',
+                                   'features': [ 'unstable' ] },
+            '*x-iops-write-max-length': { 'type': 'int',
+                                          'features': [ 'unstable' ] },
+            '*x-bps-total': { 'type': 'int',
+                              'features': [ 'unstable' ] },
+            '*x-bps-total-max': { 'type': 'int',
+                                  'features': [ 'unstable' ] },
+            '*x-bps-total-max-length': { 'type': 'int',
+                                         'features': [ 'unstable' ] },
+            '*x-bps-read': { 'type': 'int',
+                             'features': [ 'unstable' ] },
+            '*x-bps-read-max': { 'type': 'int',
+                                 'features': [ 'unstable' ] },
+            '*x-bps-read-max-length': { 'type': 'int',
+                                        'features': [ 'unstable' ] },
+            '*x-bps-write': { 'type': 'int',
+                              'features': [ 'unstable' ] },
+            '*x-bps-write-max': { 'type': 'int',
+                                  'features': [ 'unstable' ] },
+            '*x-bps-write-max-length': { 'type': 'int',
+                                         'features': [ 'unstable' ] },
+            '*x-iops-size': { 'type': 'int',
+                              'features': [ 'unstable' ] } } }
 
 ##
 # @block-stream:
@@ -2871,13 +2912,14 @@
 # @blkreplay: Since 4.2
 # @compress: Since 5.0
 # @copy-before-write: Since 6.2
+# @snapshot-access: Since 7.0
 #
 # Since: 2.9
 ##
 { 'enum': 'BlockdevDriver',
   'data': [ 'blkdebug', 'blklogwrites', 'blkreplay', 'blkverify', 'bochs',
             'cloop', 'compress', 'copy-before-write', 'copy-on-read', 'dmg',
-            'file', 'ftp', 'ftps', 'gluster',
+            'file', 'snapshot-access', 'ftp', 'ftps', 'gluster',
             {'name': 'host_cdrom', 'if': 'HAVE_HOST_BLOCK_DEVICE' },
             {'name': 'host_device', 'if': 'HAVE_HOST_BLOCK_DEVICE' },
             'http', 'https', 'iscsi',
@@ -2896,6 +2938,12 @@
 #              for this device (default: none, forward the commands via SG_IO;
 #              since 2.11)
 # @aio: AIO backend (default: threads) (since: 2.8)
+# @aio-max-batch: maximum number of requests to batch together into a single
+#                 submission in the AIO backend. The smallest value between
+#                 this and the aio-max-batch value of the IOThread object is
+#                 chosen.
+#                 0 means that the AIO backend will handle it automatically.
+#                 (default: 0, since 6.2)
 # @locking: whether to enable file locking. If set to 'auto', only enable
 #           when Open File Descriptor (OFD) locking API is available
 #           (default: auto, since 2.10)
@@ -2916,6 +2964,7 @@
 #                          read-only when the last writer is detached. This
 #                          allows giving QEMU write permissions only on demand
 #                          when an operation actually needs write access.
+# @unstable: Member x-check-cache-dropped is meant for debugging.
 #
 # Since: 2.9
 ##
@@ -2924,9 +2973,11 @@
             '*pr-manager': 'str',
             '*locking': 'OnOffAuto',
             '*aio': 'BlockdevAioOptions',
+            '*aio-max-batch': 'int',
             '*drop-cache': {'type': 'bool',
                             'if': 'CONFIG_LINUX'},
-            '*x-check-cache-dropped': 'bool' },
+            '*x-check-cache-dropped': { 'type': 'bool',
+                                        'features': [ 'unstable' ] } },
   'features': [ { 'name': 'dynamic-auto-read-only',
                   'if': 'CONFIG_POSIX' } ] }
 
@@ -3012,7 +3063,6 @@
 { 'struct': 'BlockdevOptionsLUKS',
   'base': 'BlockdevOptionsGenericFormat',
   'data': { '*key-secret': 'str' } }
-
 
 ##
 # @BlockdevOptionsGenericCOWFormat:
@@ -3127,8 +3177,6 @@
 { 'struct': 'BlockdevOptionsQcow',
   'base': 'BlockdevOptionsGenericCOWFormat',
   'data': { '*encrypt': 'BlockdevQcowEncryption' } }
-
-
 
 ##
 # @BlockdevQcow2EncryptionFormat:
@@ -3285,15 +3333,14 @@
 ##
 # @BlockdevOptionsSsh:
 #
-# @server:              host address
+# @server: host address
 #
-# @path:                path to the image on the host
+# @path: path to the image on the host
 #
-# @user:                user as which to connect, defaults to current
-#                       local user name
+# @user: user as which to connect, defaults to current local user name
 #
-# @host-key-check:      Defines how and what to check the host key against
-#                       (default: known_hosts)
+# @host-key-check: Defines how and what to check the host key against
+#                  (default: known_hosts)
 #
 # Since: 2.9
 ##
@@ -3302,7 +3349,6 @@
             'path': 'str',
             '*user': 'str',
             '*host-key-check': 'SshHostKeyCheck' } }
-
 
 ##
 # @BlkdebugEvent:
@@ -3667,7 +3713,6 @@
             '*header-digest': 'IscsiHeaderDigest',
             '*timeout': 'int' } }
 
-
 ##
 # @RbdAuthMode:
 #
@@ -4026,6 +4071,8 @@
 #
 # @tls-creds: TLS credentials ID
 #
+# @tls-hostname: TLS hostname override for certificate validation (Since 7.0)
+#
 # @x-dirty-bitmap: A metadata context name such as "qemu:dirty-bitmap:NAME"
 #                  or "qemu:allocation-depth" to query in place of the
 #                  traditional "base:allocation" block status (see
@@ -4041,14 +4088,25 @@
 #                   future requests before a successful reconnect will
 #                   immediately fail. Default 0 (Since 4.2)
 #
+# @open-timeout: In seconds. If zero, the nbd driver tries the connection
+#                only once, and fails to open if the connection fails.
+#                If non-zero, the nbd driver will repeat connection attempts
+#                until successful or until @open-timeout seconds have elapsed.
+#                Default 0 (Since 7.0)
+#
+# Features:
+# @unstable: Member @x-dirty-bitmap is experimental.
+#
 # Since: 2.9
 ##
 { 'struct': 'BlockdevOptionsNbd',
   'data': { 'server': 'SocketAddress',
             '*export': 'str',
             '*tls-creds': 'str',
-            '*x-dirty-bitmap': 'str',
-            '*reconnect-delay': 'uint32' } }
+            '*tls-hostname': 'str',
+            '*x-dirty-bitmap': { 'type': 'str', 'features': [ 'unstable' ] },
+            '*reconnect-delay': 'uint32',
+            '*open-timeout': 'uint32' } }
 
 ##
 # @BlockdevOptionsRaw:
@@ -4072,6 +4130,7 @@
 # @throttle-group: the name of the throttle-group object to use. It
 #                  must already exist.
 # @file: reference to or definition of the data source block device
+#
 # Since: 2.11
 ##
 { 'struct': 'BlockdevOptionsThrottle',
@@ -4109,11 +4168,19 @@
 #
 # @target: The target for copy-before-write operations.
 #
+# @bitmap: If specified, copy-before-write filter will do
+#          copy-before-write operations only for dirty regions of the
+#          bitmap. Bitmap size must be equal to length of file and
+#          target child of the filter. Note also, that bitmap is used
+#          only to initialize internal bitmap of the process, so further
+#          modifications (or removing) of specified bitmap doesn't
+#          influence the filter. (Since 7.0)
+#
 # Since: 6.2
 ##
 { 'struct': 'BlockdevOptionsCbw',
   'base': 'BlockdevOptionsGenericFormat',
-  'data': { 'target': 'BlockdevRef' } }
+  'data': { 'target': 'BlockdevRef', '*bitmap': 'BlockDirtyBitmap' } }
 
 ##
 # @BlockdevOptions:
@@ -4197,6 +4264,7 @@
       'rbd':        'BlockdevOptionsRbd',
       'replication': { 'type': 'BlockdevOptionsReplication',
                        'if': 'CONFIG_REPLICATION' },
+      'snapshot-access': 'BlockdevOptionsGenericFormat',
       'ssh':        'BlockdevOptionsSsh',
       'throttle':   'BlockdevOptionsThrottle',
       'vdi':        'BlockdevOptionsGenericFormat',
@@ -4479,14 +4547,13 @@
 ##
 # @BlockdevQcow2Version:
 #
-# @v2:  The original QCOW2 format as introduced in qemu 0.10 (version 2)
-# @v3:  The extended QCOW2 format as introduced in qemu 1.1 (version 3)
+# @v2: The original QCOW2 format as introduced in qemu 0.10 (version 2)
+# @v3: The extended QCOW2 format as introduced in qemu 1.1 (version 3)
 #
 # Since: 2.12
 ##
 { 'enum': 'BlockdevQcow2Version',
   'data': [ 'v2', 'v3' ] }
-
 
 ##
 # @Qcow2CompressionType:
@@ -4594,18 +4661,18 @@
 #
 # Subformat options for VMDK images
 #
-# @monolithicSparse:     Single file image with sparse cluster allocation
+# @monolithicSparse: Single file image with sparse cluster allocation
 #
-# @monolithicFlat:       Single flat data image and a descriptor file
+# @monolithicFlat: Single flat data image and a descriptor file
 #
 # @twoGbMaxExtentSparse: Data is split into 2GB (per virtual LBA) sparse extent
 #                        files, in addition to a descriptor file
 #
-# @twoGbMaxExtentFlat:   Data is split into 2GB (per virtual LBA) flat extent
-#                        files, in addition to a descriptor file
+# @twoGbMaxExtentFlat: Data is split into 2GB (per virtual LBA) flat extent
+#                      files, in addition to a descriptor file
 #
-# @streamOptimized:      Single file image sparse cluster allocation, optimized
-#                        for streaming over network.
+# @streamOptimized: Single file image sparse cluster allocation, optimized
+#                   for streaming over network.
 #
 # Since: 4.0
 ##
@@ -4643,6 +4710,8 @@
 # @adapter-type: The adapter type used to fill in the descriptor. Default: ide.
 # @hwversion: Hardware version. The meaningful options are "4" or "6".
 #             Default: "4".
+# @toolsversion: VMware guest tools version.
+#                Default: "2147483647" (Since 6.2)
 # @zeroed-grain: Whether to enable zeroed-grain feature for sparse subformats.
 #                Default: false.
 #
@@ -4656,8 +4725,8 @@
             '*backing-file':    'str',
             '*adapter-type':    'BlockdevVmdkAdapterType',
             '*hwversion':       'str',
+            '*toolsversion':    'str',
             '*zeroed-grain':    'bool' } }
-
 
 ##
 # @BlockdevCreateOptionsSsh:
@@ -4694,7 +4763,7 @@
 # @BlockdevVhdxSubformat:
 #
 # @dynamic: Growing image file
-# @fixed:   Preallocated fixed-size image file
+# @fixed: Preallocated fixed-size image file
 #
 # Since: 2.12
 ##
@@ -4732,7 +4801,7 @@
 # @BlockdevVpcSubformat:
 #
 # @dynamic: Growing image file
-# @fixed:   Preallocated fixed-size image file
+# @fixed: Preallocated fixed-size image file
 #
 # Since: 2.12
 ##
@@ -4795,9 +4864,9 @@
 # Starts a job to create an image format on a given node. The job is
 # automatically finalized, but a manual job-dismiss is required.
 #
-# @job-id:          Identifier for the newly created job.
+# @job-id: Identifier for the newly created job.
 #
-# @options:         Options for the image creation.
+# @options: Options for the image creation.
 #
 # Since: 3.0
 ##
@@ -4835,7 +4904,7 @@
 #
 # Options for amending an image format
 #
-# @driver:          Block driver of the node to amend.
+# @driver: Block driver of the node to amend.
 #
 # Since: 5.1
 ##
@@ -4853,17 +4922,20 @@
 # Starts a job to amend format specific options of an existing open block device
 # The job is automatically finalized, but a manual job-dismiss is required.
 #
-# @job-id:          Identifier for the newly created job.
+# @job-id: Identifier for the newly created job.
 #
-# @node-name:       Name of the block node to work on
+# @node-name: Name of the block node to work on
 #
-# @options:         Options (driver specific)
+# @options: Options (driver specific)
 #
-# @force:           Allow unsafe operations, format specific
-#                   For luks that allows erase of the last active keyslot
-#                   (permanent loss of data),
-#                   and replacement of an active keyslot
-#                   (possible loss of data if IO error happens)
+# @force: Allow unsafe operations, format specific
+#         For luks that allows erase of the last active keyslot
+#         (permanent loss of data),
+#         and replacement of an active keyslot
+#         (possible loss of data if IO error happens)
+#
+# Features:
+# @unstable: This command is experimental.
 #
 # Since: 5.1
 ##
@@ -4871,7 +4943,8 @@
   'data': { 'job-id': 'str',
             'node-name': 'str',
             'options': 'BlockdevAmendOptions',
-            '*force': 'bool' } }
+            '*force': 'bool' },
+  'features': [ 'unstable' ] }
 
 ##
 # @BlockErrorAction:
@@ -4888,7 +4961,6 @@
 ##
 { 'enum': 'BlockErrorAction',
   'data': [ 'ignore', 'report', 'stop' ] }
-
 
 ##
 # @BLOCK_IMAGE_CORRUPTED:
@@ -4924,10 +4996,9 @@
 # Example:
 #
 # <- { "event": "BLOCK_IMAGE_CORRUPTED",
-#      "data": { "device": "ide0-hd0", "node-name": "node0",
-#                "msg": "Prevented active L1 table overwrite", "offset": 196608,
-#                "size": 65536 },
-#      "timestamp": { "seconds": 1378126126, "microseconds": 966463 } }
+#      "data": { "device": "", "node-name": "drive", "fatal": false,
+#                "msg": "L2 table offset 0x2a2a2a00 unaligned (L1 index: 0)" },
+#      "timestamp": { "seconds": 1648243240, "microseconds": 906060 } }
 #
 # Since: 1.7
 ##
@@ -4977,7 +5048,8 @@
 #      "data": { "device": "ide0-hd1",
 #                "node-name": "#block212",
 #                "operation": "write",
-#                "action": "stop" },
+#                "action": "stop",
+#                "reason": "No space left on device" },
 #      "timestamp": { "seconds": 1265044230, "microseconds": 450486 } }
 #
 ##
@@ -5143,8 +5215,8 @@
 #
 # Example:
 #
-# <- { "event": "BLOCK_JOB_WAITING",
-#      "data": { "device": "drive0", "type": "mirror" },
+# <- { "event": "BLOCK_JOB_PENDING",
+#      "data": { "type": "mirror", "id": "backup_1" },
 #      "timestamp": { "seconds": 1265044230, "microseconds": 450486 } }
 #
 ##
@@ -5242,16 +5314,18 @@
 #
 # @node: the name of the node that will be added.
 #
-# Note: this command is experimental, and its API is not stable. It
-#       does not support all kinds of operations, all kinds of children, nor
-#       all block drivers.
+# Features:
+# @unstable: This command is experimental, and its API is not stable.  It
+#            does not support all kinds of operations, all kinds of
+#            children, nor all block drivers.
 #
-#       FIXME Removing children from a quorum node means introducing gaps in the
-#       child indices. This cannot be represented in the 'children' list of
-#       BlockdevOptionsQuorum, as returned by .bdrv_refresh_filename().
+#            FIXME Removing children from a quorum node means introducing
+#            gaps in the child indices. This cannot be represented in the
+#            'children' list of BlockdevOptionsQuorum, as returned by
+#            .bdrv_refresh_filename().
 #
-#       Warning: The data in a new quorum child MUST be consistent with that of
-#       the rest of the array.
+#            Warning: The data in a new quorum child MUST be consistent
+#            with that of the rest of the array.
 #
 # Since: 2.7
 #
@@ -5280,7 +5354,8 @@
 { 'command': 'x-blockdev-change',
   'data' : { 'parent': 'str',
              '*child': 'str',
-             '*node': 'str' } }
+             '*node': 'str' },
+  'features': [ 'unstable' ] }
 
 ##
 # @x-blockdev-set-iothread:
@@ -5297,8 +5372,9 @@
 # @force: true if the node and its children should be moved when a BlockBackend
 #         is already attached
 #
-# Note: this command is experimental and intended for test cases that need
-#       control over IOThreads only.
+# Features:
+# @unstable: This command is experimental and intended for test cases that
+#            need control over IOThreads only.
 #
 # Since: 2.12
 #
@@ -5320,7 +5396,8 @@
 { 'command': 'x-blockdev-set-iothread',
   'data' : { 'node-name': 'str',
              'iothread': 'StrOrNull',
-             '*force': 'bool' } }
+             '*force': 'bool' },
+  'features': [ 'unstable' ] }
 
 ##
 # @QuorumOpType:

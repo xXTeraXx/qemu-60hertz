@@ -24,16 +24,16 @@ check-system-alpine:
       artifacts: true
   variables:
     IMAGE: alpine
-    MAKE_CHECK_ARGS: check
+    MAKE_CHECK_ARGS: check-unit check-qtest
 
-acceptance-system-alpine:
-  extends: .acceptance_test_job_template
+avocado-system-alpine:
+  extends: .avocado_test_job_template
   needs:
     - job: build-system-alpine
       artifacts: true
   variables:
     IMAGE: alpine
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
 
 build-system-ubuntu:
   extends: .native_build_job_template
@@ -42,6 +42,7 @@ build-system-ubuntu:
   variables:
     IMAGE: ubuntu2004
     CONFIGURE_ARGS: --enable-docs --enable-fdt=system --enable-slirp=system
+        --enable-capstone
     TARGETS: aarch64-softmmu alpha-softmmu cris-softmmu hppa-softmmu
       microblazeel-softmmu mips64el-softmmu
     MAKE_CHECK_ARGS: check-build
@@ -59,14 +60,14 @@ check-system-ubuntu:
     IMAGE: ubuntu2004
     MAKE_CHECK_ARGS: check
 
-acceptance-system-ubuntu:
-  extends: .acceptance_test_job_template
+avocado-system-ubuntu:
+  extends: .avocado_test_job_template
   needs:
     - job: build-system-ubuntu
       artifacts: true
   variables:
     IMAGE: ubuntu2004
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
 
 build-system-debian:
   extends: .native_build_job_template
@@ -91,14 +92,26 @@ check-system-debian:
     IMAGE: debian-amd64
     MAKE_CHECK_ARGS: check
 
-acceptance-system-debian:
-  extends: .acceptance_test_job_template
+avocado-system-debian:
+  extends: .avocado_test_job_template
   needs:
     - job: build-system-debian
       artifacts: true
   variables:
     IMAGE: debian-amd64
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
+
+crash-test-debian:
+  extends: .native_test_job_template
+  needs:
+    - job: build-system-debian
+      artifacts: true
+  variables:
+    IMAGE: debian-amd64
+  script:
+    - cd build
+    - make check-venv
+    - tests/venv/bin/python3 scripts/device-crash-test -q ./qemu-system-i386
 
 build-system-fedora:
   extends: .native_build_job_template
@@ -107,7 +120,7 @@ build-system-fedora:
   variables:
     IMAGE: fedora
     CONFIGURE_ARGS: --disable-gcrypt --enable-nettle --enable-docs
-             --enable-fdt=system --enable-slirp=system --enable-capstone=system
+             --enable-fdt=system --enable-slirp=system --enable-capstone
     TARGETS: tricore-softmmu microblaze-softmmu mips-softmmu
       xtensa-softmmu m68k-softmmu riscv32-softmmu ppc-softmmu sparc64-softmmu
     MAKE_CHECK_ARGS: check-build
@@ -125,14 +138,27 @@ check-system-fedora:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
-acceptance-system-fedora:
-  extends: .acceptance_test_job_template
+avocado-system-fedora:
+  extends: .avocado_test_job_template
   needs:
     - job: build-system-fedora
       artifacts: true
   variables:
     IMAGE: fedora
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
+
+crash-test-fedora:
+  extends: .native_test_job_template
+  needs:
+    - job: build-system-fedora
+      artifacts: true
+  variables:
+    IMAGE: fedora
+  script:
+    - cd build
+    - make check-venv
+    - tests/venv/bin/python3 scripts/device-crash-test -q ./qemu-system-ppc
+    - tests/venv/bin/python3 scripts/device-crash-test -q ./qemu-system-riscv32
 
 build-system-centos:
   extends: .native_build_job_template
@@ -141,7 +167,7 @@ build-system-centos:
   variables:
     IMAGE: centos8
     CONFIGURE_ARGS: --disable-nettle --enable-gcrypt --enable-fdt=system
-                    --enable-modules --enable-trace-backends=dtrace
+      --enable-modules --enable-trace-backends=dtrace --enable-docs
     TARGETS: ppc64-softmmu or1k-softmmu s390x-softmmu
       x86_64-softmmu rx-softmmu sh4-softmmu nios2-softmmu
     MAKE_CHECK_ARGS: check-build
@@ -159,14 +185,14 @@ check-system-centos:
     IMAGE: centos8
     MAKE_CHECK_ARGS: check
 
-acceptance-system-centos:
-  extends: .acceptance_test_job_template
+avocado-system-centos:
+  extends: .avocado_test_job_template
   needs:
     - job: build-system-centos
       artifacts: true
   variables:
     IMAGE: centos8
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
 
 build-system-opensuse:
   extends: .native_build_job_template
@@ -191,14 +217,14 @@ check-system-opensuse:
     IMAGE: opensuse-leap
     MAKE_CHECK_ARGS: check
 
-acceptance-system-opensuse:
-  extends: .acceptance_test_job_template
+avocado-system-opensuse:
+  extends: .avocado_test_job_template
   needs:
     - job: build-system-opensuse
       artifacts: true
   variables:
     IMAGE: opensuse-leap
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
 
 
 # This jobs explicitly disable TCG (--disable-tcg), KVM is detected by
@@ -317,7 +343,7 @@ clang-user:
 # This can be accomplished by using -enable-slirp=git, which avoids the use of
 # a system-wide version of the library
 #
-# Split in three sets of build/check/acceptance to limit the execution time of each
+# Split in three sets of build/check/avocado to limit the execution time of each
 # job
 build-cfi-aarch64:
   extends: .native_build_job_template
@@ -336,12 +362,11 @@ build-cfi-aarch64:
     expire_in: 2 days
     paths:
       - build
-  rules:
+  variables:
     # FIXME: This job is often failing, likely due to out-of-memory problems in
     # the constrained containers of the shared runners. Thus this is marked as
-    # manual until the situation has been solved.
-    - when: manual
-      allow_failure: true
+    # skipped until the situation has been solved.
+    QEMU_JOB_SKIPPED: 1
 
 check-cfi-aarch64:
   extends: .native_test_job_template
@@ -352,14 +377,14 @@ check-cfi-aarch64:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
-acceptance-cfi-aarch64:
-  extends: .acceptance_test_job_template
+avocado-cfi-aarch64:
+  extends: .avocado_test_job_template
   needs:
     - job: build-cfi-aarch64
       artifacts: true
   variables:
     IMAGE: fedora
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
 
 build-cfi-ppc64-s390x:
   extends: .native_build_job_template
@@ -378,12 +403,11 @@ build-cfi-ppc64-s390x:
     expire_in: 2 days
     paths:
       - build
-  rules:
+  variables:
     # FIXME: This job is often failing, likely due to out-of-memory problems in
     # the constrained containers of the shared runners. Thus this is marked as
-    # manual until the situation has been solved.
-    - when: manual
-      allow_failure: true
+    # skipped until the situation has been solved.
+    QEMU_JOB_SKIPPED: 1
 
 check-cfi-ppc64-s390x:
   extends: .native_test_job_template
@@ -394,14 +418,14 @@ check-cfi-ppc64-s390x:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
-acceptance-cfi-ppc64-s390x:
-  extends: .acceptance_test_job_template
+avocado-cfi-ppc64-s390x:
+  extends: .avocado_test_job_template
   needs:
     - job: build-cfi-ppc64-s390x
       artifacts: true
   variables:
     IMAGE: fedora
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
 
 build-cfi-x86_64:
   extends: .native_build_job_template
@@ -430,14 +454,14 @@ check-cfi-x86_64:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
-acceptance-cfi-x86_64:
-  extends: .acceptance_test_job_template
+avocado-cfi-x86_64:
+  extends: .avocado_test_job_template
   needs:
     - job: build-cfi-x86_64
       artifacts: true
   variables:
     IMAGE: fedora
-    MAKE_CHECK_ARGS: check-acceptance
+    MAKE_CHECK_ARGS: check-avocado
 
 tsan-build:
   extends: .native_build_job_template
@@ -449,33 +473,6 @@ tsan-build:
           --enable-trace-backends=ust --enable-fdt=system --enable-slirp=system
     TARGETS: x86_64-softmmu ppc64-softmmu riscv64-softmmu x86_64-linux-user
     MAKE_CHECK_ARGS: bench V=1
-
-# These targets are on the way out
-build-deprecated:
-  extends: .native_build_job_template
-  needs:
-    job: amd64-debian-user-cross-container
-  variables:
-    IMAGE: debian-all-test-cross
-    CONFIGURE_ARGS: --disable-tools
-    MAKE_CHECK_ARGS: build-tcg
-    TARGETS: ppc64abi32-linux-user
-  artifacts:
-    expire_in: 2 days
-    paths:
-      - build
-
-# We split the check-tcg step as test failures are expected but we still
-# want to catch the build breaking.
-check-deprecated:
-  extends: .native_test_job_template
-  needs:
-    - job: build-deprecated
-      artifacts: true
-  variables:
-    IMAGE: debian-all-test-cross
-    MAKE_CHECK_ARGS: check-tcg
-  allow_failure: true
 
 # gprof/gcov are GCC features
 build-gprof-gcov:
@@ -519,8 +516,6 @@ build-oss-fuzz:
         echo Testing ${fuzzer} ... ;
         "${fuzzer}" -runs=1 -seed=1 || exit 1 ;
       done
-    # Unrelated to fuzzer: run some tests with -fsanitize=address
-    - cd build-oss-fuzz && make check-qtest-i386 check-unit
 
 build-tci:
   extends: .native_build_job_template
@@ -575,7 +570,6 @@ build-without-default-features:
     CONFIGURE_ARGS:
       --without-default-features
       --disable-capstone
-      --disable-fdt
       --disable-pie
       --disable-qom-cast-debug
       --disable-slirp
@@ -585,6 +579,7 @@ build-without-default-features:
     MAKE_CHECK_ARGS: check-unit check-qtest SPEED=slow
 
 build-libvhost-user:
+  extends: .base_job_template
   stage: build
   image: $CI_REGISTRY_IMAGE/qemu/fedora:latest
   needs:
@@ -601,10 +596,13 @@ build-tools-and-docs-debian:
   extends: .native_build_job_template
   needs:
     job: amd64-debian-container
+    # when running on 'master' we use pre-existing container
+    optional: true
   variables:
     IMAGE: debian-amd64
     MAKE_CHECK_ARGS: check-unit check-softfloat ctags TAGS cscope
     CONFIGURE_ARGS: --disable-system --disable-user --enable-docs --enable-tools
+    QEMU_JOB_PUBLISH: 1
   artifacts:
     expire_in: 2 days
     paths:
@@ -624,6 +622,7 @@ build-tools-and-docs-debian:
 # that users can see the results of their commits, regardless
 # of what topic branch they're currently using
 pages:
+  extends: .base_job_template
   image: $CI_REGISTRY_IMAGE/qemu/debian-amd64:latest
   stage: test
   needs:
@@ -641,10 +640,5 @@ pages:
   artifacts:
     paths:
       - public
-  rules:
-    - if: '$CI_PROJECT_NAMESPACE == "qemu-project" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: on_success
-    - if: '$CI_PROJECT_NAMESPACE == "qemu-project"'
-      when: never
-    - if: '$CI_PROJECT_NAMESPACE != "qemu-project"'
-      when: on_success
+  variables:
+    QEMU_JOB_PUBLISH: 1

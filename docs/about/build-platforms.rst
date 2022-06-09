@@ -54,10 +54,12 @@ Those hosts are officially supported, with various accelerators:
    * - x86
      - hax, hvf (64 bit only), kvm, nvmm, tcg, whpx (64 bit only), xen
 
-Other host architectures are not supported. It is possible to build QEMU on an
-unsupported host architecture using the configure ``--enable-tcg-interpreter``
-option to enable the experimental TCI support, but note that this is very slow
-and is not recommended.
+Other host architectures are not supported. It is possible to build QEMU system
+emulation on an unsupported host architecture using the configure
+``--enable-tcg-interpreter`` option to enable the TCI support, but note that
+this is very slow and is not recommended for normal use. QEMU user emulation
+requires host-specific support for signal handling, therefore TCI won't help
+on unsupported host architectures.
 
 Non-supported architectures may be removed in the future following the
 :ref:`deprecation process<Deprecated features>`.
@@ -78,18 +80,22 @@ Ubuntu LTS. Other distros will be assumed to ship similar software versions.
 For FreeBSD and OpenBSD, decisions will be made based on the contents of the
 respective ports repository, while NetBSD will use the pkgsrc repository.
 
-For macOS, `HomeBrew`_ will be used, although `MacPorts`_ is expected to carry
+For macOS, `Homebrew`_ will be used, although `MacPorts`_ is expected to carry
 similar versions.
 
 Windows
 -------
 
-The project supports building with current versions of the MinGW toolchain,
-hosted on Linux (Debian/Fedora).
+The project aims to support the two most recent versions of Windows that are
+still supported by the vendor. The minimum Windows API that is currently
+targeted is "Windows 7", so theoretically the QEMU binaries can still be run
+on older versions of Windows, too. However, such old versions of Windows are
+not tested anymore, so it is recommended to use one of the latest versions of
+Windows instead.
 
-The version of the Windows API that's currently targeted is Vista / Server
-2008.
+The project supports building QEMU with current versions of the MinGW
+toolchain, either hosted on Linux (Debian/Fedora) or via MSYS2 on Windows.
 
-.. _HomeBrew: https://brew.sh/
+.. _Homebrew: https://brew.sh/
 .. _MacPorts: https://www.macports.org/
 .. _Repology: https://repology.org/

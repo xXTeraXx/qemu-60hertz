@@ -28,6 +28,7 @@
 #include "sysemu/reset.h"
 #include "sysemu/runstate.h"
 #include "acpi-microvm.h"
+#include "microvm-dt.h"
 
 #include "hw/loader.h"
 #include "hw/irq.h"
@@ -246,7 +247,7 @@ static void microvm_devices_init(MicrovmMachineState *mms)
         x86ms->pci_irq_mask = 0;
     }
 
-    if (mms->pic == ON_OFF_AUTO_ON || mms->pic == ON_OFF_AUTO_AUTO) {
+    if (x86ms->pic == ON_OFF_AUTO_ON || x86ms->pic == ON_OFF_AUTO_AUTO) {
         qemu_irq *i8259;
 
         i8259 = i8259_init(isa_bus, x86_allocate_cpu_irq());
@@ -256,7 +257,7 @@ static void microvm_devices_init(MicrovmMachineState *mms)
         g_free(i8259);
     }
 
-    if (mms->pit == ON_OFF_AUTO_ON || mms->pit == ON_OFF_AUTO_AUTO) {
+    if (x86ms->pit == ON_OFF_AUTO_ON || x86ms->pit == ON_OFF_AUTO_AUTO) {
         if (kvm_pit_in_kernel()) {
             kvm_pit_init(isa_bus, 0x40);
         } else {
@@ -331,7 +332,7 @@ static void microvm_memory_init(MicrovmMachineState *mms)
     rom_set_fw(fw_cfg);
 
     if (machine->kernel_filename != NULL) {
-        x86_load_linux(x86ms, fw_cfg, 0, true, true);
+        x86_load_linux(x86ms, fw_cfg, 0, true);
     }
 
     if (mms->option_roms) {
@@ -490,40 +491,6 @@ static void microvm_machine_reset(MachineState *machine)
     }
 }
 
-static void microvm_machine_get_pic(Object *obj, Visitor *v, const char *name,
-                                    void *opaque, Error **errp)
-{
-    MicrovmMachineState *mms = MICROVM_MACHINE(obj);
-    OnOffAuto pic = mms->pic;
-
-    visit_type_OnOffAuto(v, name, &pic, errp);
-}
-
-static void microvm_machine_set_pic(Object *obj, Visitor *v, const char *name,
-                                    void *opaque, Error **errp)
-{
-    MicrovmMachineState *mms = MICROVM_MACHINE(obj);
-
-    visit_type_OnOffAuto(v, name, &mms->pic, errp);
-}
-
-static void microvm_machine_get_pit(Object *obj, Visitor *v, const char *name,
-                                    void *opaque, Error **errp)
-{
-    MicrovmMachineState *mms = MICROVM_MACHINE(obj);
-    OnOffAuto pit = mms->pit;
-
-    visit_type_OnOffAuto(v, name, &pit, errp);
-}
-
-static void microvm_machine_set_pit(Object *obj, Visitor *v, const char *name,
-                                    void *opaque, Error **errp)
-{
-    MicrovmMachineState *mms = MICROVM_MACHINE(obj);
-
-    visit_type_OnOffAuto(v, name, &mms->pit, errp);
-}
-
 static void microvm_machine_get_rtc(Object *obj, Visitor *v, const char *name,
                                     void *opaque, Error **errp)
 {
@@ -626,6 +593,7 @@ static void microvm_machine_done(Notifier *notifier, void *data)
                                             machine_done);
 
     acpi_setup_microvm(mms);
+    dt_setup_microvm(mms);
 }
 
 static void microvm_powerdown_req(Notifier *notifier, void *data)
@@ -647,8 +615,6 @@ static void microvm_machine_initfn(Object *obj)
     MicrovmMachineState *mms = MICROVM_MACHINE(obj);
 
     /* Configuration */
-    mms->pic = ON_OFF_AUTO_AUTO;
-    mms->pit = ON_OFF_AUTO_AUTO;
     mms->rtc = ON_OFF_AUTO_AUTO;
     mms->pcie = ON_OFF_AUTO_AUTO;
     mms->ioapic2 = ON_OFF_AUTO_AUTO;
@@ -667,6 +633,7 @@ static void microvm_machine_initfn(Object *obj)
 
 static void microvm_class_init(ObjectClass *oc, void *data)
 {
+    X86MachineClass *x86mc = X86_MACHINE_CLASS(oc);
     MachineClass *mc = MACHINE_CLASS(oc);
     HotplugHandlerClass *hc = HOTPLUG_HANDLER_CLASS(oc);
 
@@ -697,19 +664,7 @@ static void microvm_class_init(ObjectClass *oc, void *data)
     hc->unplug_request = microvm_device_unplug_request_cb;
     hc->unplug = microvm_device_unplug_cb;
 
-    object_class_property_add(oc, MICROVM_MACHINE_PIC, "OnOffAuto",
-                              microvm_machine_get_pic,
-                              microvm_machine_set_pic,
-                              NULL, NULL);
-    object_class_property_set_description(oc, MICROVM_MACHINE_PIC,
-        "Enable i8259 PIC");
-
-    object_class_property_add(oc, MICROVM_MACHINE_PIT, "OnOffAuto",
-                              microvm_machine_get_pit,
-                              microvm_machine_set_pit,
-                              NULL, NULL);
-    object_class_property_set_description(oc, MICROVM_MACHINE_PIT,
-        "Enable i8254 PIT");
+    x86mc->fwcfg_dma_enabled = true;
 
     object_class_property_add(oc, MICROVM_MACHINE_RTC, "OnOffAuto",
                               microvm_machine_get_rtc,

@@ -2,8 +2,9 @@ all: build-all
 # Dummy command so that make thinks it has done something
 	@true
 
-include ../../config-host.mak
+include config-host.mak
 CFLAGS = -O2 -g
+MAKEFLAGS += -rR
 
 quiet-command = $(if $(V),$1,$(if $(2),@printf "  %-7s %s\n" $2 $3 && $1, @$1))
 cc-option = $(if $(shell $(CC) $1 $2 -S -o /dev/null -xc /dev/null \
@@ -11,7 +12,7 @@ cc-option = $(if $(shell $(CC) $1 $2 -S -o /dev/null -xc /dev/null \
 
 VPATH_SUFFIXES = %.c %.h %.S %.m %.mak %.sh %.rc Kconfig% %.json.in
 set-vpath = $(if $1,$(foreach PATTERN,$(VPATH_SUFFIXES),$(eval vpath $(PATTERN) $1)))
-$(call set-vpath, $(SRC_PATH)/pc-bios/s390-ccw)
+$(call set-vpath, $(SRC_PATH))
 
 # Flags for dependency generation
 QEMU_DGFLAGS = -MMD -MP -MT $@ -MF $(@D)/$(*F).d
@@ -44,15 +45,13 @@ build-all: s390-ccw.img s390-netboot.img
 s390-ccw.elf: $(OBJECTS)
 	$(call quiet-command,$(CC) $(LDFLAGS) -o $@ $(OBJECTS),"BUILD","$(TARGET_DIR)$@")
 
-STRIP ?= strip
-
 s390-ccw.img: s390-ccw.elf
 	$(call quiet-command,$(STRIP) --strip-unneeded $< -o $@,"STRIP","$(TARGET_DIR)$@")
 
 $(OBJECTS): Makefile
 
-ifneq ($(wildcard $(SRC_PATH)/roms/SLOF/lib/libnet),)
-include $(SRC_PATH)/pc-bios/s390-ccw/netboot.mak
+ifneq ($(wildcard $(SRC_PATH)/../../roms/SLOF/lib/libnet),)
+include $(SRC_PATH)/netboot.mak
 else
 s390-netboot.img:
 	@echo "s390-netboot.img not built since roms/SLOF/ is not available."

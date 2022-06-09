@@ -18,6 +18,8 @@
 #ifndef PPC_INTERNAL_H
 #define PPC_INTERNAL_H
 
+#include "hw/registerfields.h"
+
 #define FUNC_MASK(name, ret_type, size, max_val)                  \
 static inline ret_type name(uint##size##_t start,                 \
                               uint##size##_t end)                 \
@@ -211,11 +213,6 @@ void helper_compute_fprf_float16(CPUPPCState *env, float16 arg);
 void helper_compute_fprf_float32(CPUPPCState *env, float32 arg);
 void helper_compute_fprf_float128(CPUPPCState *env, float128 arg);
 
-/* Raise a data fault alignment exception for the specified virtual address */
-void ppc_cpu_do_unaligned_access(CPUState *cs, vaddr addr,
-                                 MMUAccessType access_type, int mmu_idx,
-                                 uintptr_t retaddr) QEMU_NORETURN;
-
 /* translate.c */
 
 int ppc_fixup_cpu(PowerPCCPU *cpu);
@@ -283,5 +280,30 @@ static inline void pte_invalidate(target_ulong *pte0)
 #define PTE_PTEM_MASK 0x7FFFFFBF
 #define PTE_CHECK_MASK (TARGET_PAGE_MASK | 0x7B)
 
+#ifdef CONFIG_USER_ONLY
+void ppc_cpu_record_sigsegv(CPUState *cs, vaddr addr,
+                            MMUAccessType access_type,
+                            bool maperr, uintptr_t ra);
+#else
+bool ppc_cpu_tlb_fill(CPUState *cs, vaddr address, int size,
+                      MMUAccessType access_type, int mmu_idx,
+                      bool probe, uintptr_t retaddr);
+G_NORETURN void ppc_cpu_do_unaligned_access(CPUState *cs, vaddr addr,
+                                            MMUAccessType access_type, int mmu_idx,
+                                            uintptr_t retaddr);
+#endif
+
+FIELD(GER_MSK, XMSK, 0, 4)
+FIELD(GER_MSK, YMSK, 4, 4)
+FIELD(GER_MSK, PMSK, 8, 8)
+
+static inline int ger_pack_masks(int pmsk, int ymsk, int xmsk)
+{
+    int msk = 0;
+    msk = FIELD_DP32(msk, GER_MSK, XMSK, xmsk);
+    msk = FIELD_DP32(msk, GER_MSK, YMSK, ymsk);
+    msk = FIELD_DP32(msk, GER_MSK, PMSK, pmsk);
+    return msk;
+}
 
 #endif /* PPC_INTERNAL_H */

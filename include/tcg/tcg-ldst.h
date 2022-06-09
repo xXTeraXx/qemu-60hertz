@@ -23,7 +23,7 @@
  */
 
 #ifndef TCG_LDST_H
-#define TCG_LDST_H 1
+#define TCG_LDST_H
 
 #ifdef CONFIG_SOFTMMU
 
@@ -69,6 +69,11 @@ void helper_be_stl_mmu(CPUArchState *env, target_ulong addr, uint32_t val,
                        MemOpIdx oi, uintptr_t retaddr);
 void helper_be_stq_mmu(CPUArchState *env, target_ulong addr, uint64_t val,
                        MemOpIdx oi, uintptr_t retaddr);
+
+#else
+
+G_NORETURN void helper_unaligned_ld(CPUArchState *env, target_ulong addr);
+G_NORETURN void helper_unaligned_st(CPUArchState *env, target_ulong addr);
 
 #endif /* CONFIG_SOFTMMU */
 #endif /* TCG_LDST_H */

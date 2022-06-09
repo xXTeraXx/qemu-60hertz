@@ -18,15 +18,6 @@
 #ifndef TARGET_ARM_TRANSLATE_A64_H
 #define TARGET_ARM_TRANSLATE_A64_H
 
-#define unsupported_encoding(s, insn)                                    \
-    do {                                                                 \
-        qemu_log_mask(LOG_UNIMP,                                         \
-                      "%s:%d: unsupported instruction encoding 0x%08x "  \
-                      "at pc=%016" PRIx64 "\n",                          \
-                      __FILE__, __LINE__, insn, s->pc_curr);             \
-        unallocated_encoding(s);                                         \
-    } while (0)
-
 TCGv_i64 new_tmp_a64(DisasContext *s);
 TCGv_i64 new_tmp_a64_local(DisasContext *s);
 TCGv_i64 new_tmp_a64_zero(DisasContext *s);
@@ -71,7 +62,7 @@ static inline int vec_reg_offset(DisasContext *s, int regno,
 {
     int element_size = 1 << size;
     int offs = element * element_size;
-#ifdef HOST_WORDS_BIGENDIAN
+#if HOST_BIG_ENDIAN
     /* This is complicated slightly because vfp.zregs[n].d[0] is
      * still the lowest and vfp.zregs[n].d[15] the highest of the
      * 256 byte vector, even on big endian systems.
@@ -113,7 +104,7 @@ static inline TCGv_ptr vec_full_reg_ptr(DisasContext *s, int regno)
 /* Return the byte size of the "whole" vector register, VL / 8.  */
 static inline int vec_full_reg_size(DisasContext *s)
 {
-    return s->sve_len;
+    return s->vl;
 }
 
 bool disas_sve(DisasContext *, uint32_t);

@@ -11,7 +11,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "libqos/libqtest.h"
+#include "libqtest.h"
 #include "qapi/error.h"
 #include "qapi/qapi-visit-introspect.h"
 #include "qapi/qmp/qdict.h"
@@ -46,6 +46,14 @@ static int query_error_class(const char *cmd)
         { "query-balloon", ERROR_CLASS_DEVICE_NOT_ACTIVE },
         { "query-hotpluggable-cpus", ERROR_CLASS_GENERIC_ERROR },
         { "query-vm-generation-id", ERROR_CLASS_GENERIC_ERROR },
+#ifndef CONFIG_PROFILER
+        { "x-query-profile", ERROR_CLASS_GENERIC_ERROR },
+#endif
+        /* Only valid with a USB bus added */
+        { "x-query-usb", ERROR_CLASS_GENERIC_ERROR },
+        /* Only valid with accel=tcg */
+        { "x-query-jit", ERROR_CLASS_GENERIC_ERROR },
+        { "x-query-opcount", ERROR_CLASS_GENERIC_ERROR },
         { NULL, -1 }
     };
     int i;

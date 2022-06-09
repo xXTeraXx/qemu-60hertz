@@ -661,7 +661,7 @@ static int cpu_pre_save(void *opaque)
     if (kvm_enabled()) {
         if (!write_kvmstate_to_list(cpu)) {
             /* This should never fail */
-            abort();
+            g_assert_not_reached();
         }
 
         /*
@@ -672,7 +672,7 @@ static int cpu_pre_save(void *opaque)
     } else {
         if (!write_cpustate_to_list(cpu, false)) {
             /* This should never fail. */
-            abort();
+            g_assert_not_reached();
         }
     }
 
@@ -794,6 +794,16 @@ static int cpu_post_load(void *opaque, int version_id)
             return -1;
         }
     }
+
+    /*
+     * Misaligned thumb pc is architecturally impossible.
+     * We have an assert in thumb_tr_translate_insn to verify this.
+     * Fail an incoming migrate to avoid this assert.
+     */
+    if (!is_a64(env) && env->thumb && (env->regs[15] & 1)) {
+        return -1;
+    }
+
     if (!kvm_enabled()) {
         pmu_op_finish(&cpu->env);
     }

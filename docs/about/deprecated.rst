@@ -39,15 +39,6 @@ should specify an ``audiodev=`` property.  Additionally, when using
 vnc, you should specify an ``audiodev=`` property if you plan to
 transmit audio through the VNC protocol.
 
-Creating sound card devices using ``-soundhw`` (since 5.1)
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-
-Sound card devices should be created using ``-device`` instead.  The
-names are the same for most devices.  The exceptions are ``hda`` which
-needs two devices (``-device intel-hda -device hda-duplex``) and
-``pcspk`` which can be activated using ``-machine
-pcspk-audiodev=<name>``.
-
 ``-chardev`` backend aliases ``tty`` and ``parport`` (since 6.0)
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
@@ -66,25 +57,6 @@ and will cause a warning.
 
 The replacement for the ``nodelay`` short-form boolean option is ``nodelay=on``
 rather than ``delay=off``.
-
-``--enable-fips`` (since 6.0)
-'''''''''''''''''''''''''''''
-
-This option restricts usage of certain cryptographic algorithms when
-the host is operating in FIPS mode.
-
-If FIPS compliance is required, QEMU should be built with the ``libgcrypt``
-library enabled as a cryptography provider.
-
-Neither the ``nettle`` library, or the built-in cryptography provider are
-supported on FIPS enabled hosts.
-
-``-writeconfig`` (since 6.0)
-'''''''''''''''''''''''''''''
-
-The ``-writeconfig`` option is not able to serialize the entire contents
-of the QEMU command line.  It is thus considered a failed experiment
-and deprecated, with no current replacement.
 
 Userspace local APIC with KVM (x86, since 6.0)
 ''''''''''''''''''''''''''''''''''''''''''''''
@@ -109,56 +81,10 @@ the process listing. This is replaced by the new ``password-secret``
 option which lets the password be securely provided on the command
 line using a ``secret`` object instance.
 
-``opened`` property of ``rng-*`` objects (since 6.0)
-''''''''''''''''''''''''''''''''''''''''''''''''''''
+``-watchdog`` (since 6.2)
+'''''''''''''''''''''''''
 
-The only effect of specifying ``opened=on`` in the command line or QMP
-``object-add`` is that the device is opened immediately, possibly before all
-other options have been processed.  This will either have no effect (if
-``opened`` was the last option) or cause errors.  The property is therefore
-useless and should not be specified.
-
-``loaded`` property of ``secret`` and ``secret_keyring`` objects (since 6.0)
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-
-The only effect of specifying ``loaded=on`` in the command line or QMP
-``object-add`` is that the secret is loaded immediately, possibly before all
-other options have been processed.  This will either have no effect (if
-``loaded`` was the last option) or cause options to be effectively ignored as
-if they were not given.  The property is therefore useless and should not be
-specified.
-
-``-display sdl,window_close=...`` (since 6.1)
-'''''''''''''''''''''''''''''''''''''''''''''
-
-Use ``-display sdl,window-close=...`` instead (i.e. with a minus instead of
-an underscore between "window" and "close").
-
-``-no-quit`` (since 6.1)
-''''''''''''''''''''''''
-
-The ``-no-quit`` is a synonym for ``-display ...,window-close=off`` which
-should be used instead.
-
-``-alt-grab`` and ``-display sdl,alt_grab=on`` (since 6.2)
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-
-Use ``-display sdl,grab-mod=lshift-lctrl-lalt`` instead.
-
-``-ctrl-grab`` and ``-display sdl,ctrl_grab=on`` (since 6.2)
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-
-Use ``-display sdl,grab-mod=rctrl`` instead.
-
-``-sdl`` (since 6.2)
-''''''''''''''''''''
-
-Use ``-display sdl`` instead.
-
-``-curses`` (since 6.2)
-'''''''''''''''''''''''
-
-Use ``-display curses`` instead.
+Use ``-device`` instead.
 
 ``-smp`` ("parameter=0" SMP configurations) (since 6.2)
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -186,6 +112,12 @@ Therefore, the usage of ``arg`` is redundant. Single-word arguments are treated
 as short-form boolean values, and passed to plugins as ``arg_name=on``.
 However, short-form booleans are deprecated and full explicit ``arg_name=on``
 form is preferred.
+
+``-drive if=none`` for the sifive_u OTP device (since 6.2)
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Using ``-drive if=none`` to configure the OTP device of the sifive_u
+RISC-V machine is deprecated. Use ``-drive if=pflash`` instead.
 
 
 QEMU Machine Protocol (QMP) commands
@@ -228,6 +160,50 @@ Use the more generic commands ``block-export-add`` and ``block-export-del``
 instead.  As part of this deprecation, where ``nbd-server-add`` used a
 single ``bitmap``, the new ``block-export-add`` uses a list of ``bitmaps``.
 
+``query-qmp-schema`` return value member ``values`` (since 6.2)
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Member ``values`` in return value elements with meta-type ``enum`` is
+deprecated.  Use ``members`` instead.
+
+``drive-backup`` (since 6.2)
+''''''''''''''''''''''''''''
+
+Use ``blockdev-backup`` in combination with ``blockdev-add`` instead.
+This change primarily separates the creation/opening process of the backup
+target with explicit, separate steps. ``blockdev-backup`` uses mostly the
+same arguments as ``drive-backup``, except the ``format`` and ``mode``
+options are removed in favor of using explicit ``blockdev-create`` and
+``blockdev-add`` calls. See :doc:`/interop/live-block-operations` for
+details.
+
+Incorrectly typed ``device_add`` arguments (since 6.2)
+''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Due to shortcomings in the internal implementation of ``device_add``, QEMU
+incorrectly accepts certain invalid arguments: Any object or list arguments are
+silently ignored. Other argument types are not checked, but an implicit
+conversion happens, so that e.g. string values can be assigned to integer
+device properties or vice versa.
+
+This is a bug in QEMU that will be fixed in the future so that previously
+accepted incorrect commands will return an error. Users should make sure that
+all arguments passed to ``device_add`` are consistent with the documented
+property types.
+
+``query-sgx`` return value member ``section-size`` (since 7.0)
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Member ``section-size`` in return value elements with meta-type ``uint64`` is
+deprecated.  Use ``sections`` instead.
+
+
+``query-sgx-capabilities`` return value member ``section-size`` (since 7.0)
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Member ``section-size`` in return value elements with meta-type ``uint64`` is
+deprecated.  Use ``sections`` instead.
+
 System accelerators
 -------------------
 
@@ -239,12 +215,6 @@ from Linux upstream kernel, declare it deprecated.
 
 System emulator CPUS
 --------------------
-
-``Icelake-Client`` CPU Model (since 5.2)
-''''''''''''''''''''''''''''''''''''''''
-
-``Icelake-Client`` CPU Models are deprecated. Use ``Icelake-Server`` CPU
-Models instead.
 
 MIPS ``I7200`` CPU Model (since 5.2)
 ''''''''''''''''''''''''''''''''''''
@@ -266,12 +236,22 @@ Use the more generic event ``DEVICE_UNPLUG_GUEST_ERROR`` instead.
 System emulator machines
 ------------------------
 
-Aspeed ``swift-bmc`` machine (since 6.1)
-''''''''''''''''''''''''''''''''''''''''
+PPC 405 ``taihu`` machine (since 7.0)
+'''''''''''''''''''''''''''''''''''''
 
-This machine is deprecated because we have enough AST2500 based OpenPOWER
-machines. It can be easily replaced by the ``witherspoon-bmc`` or the
-``romulus-bmc`` machines.
+The PPC 405 CPU is a system-on-a-chip, so all 405 machines are very similar,
+except for some external periphery. However, the periphery of the ``taihu``
+machine is hardly emulated at all (e.g. neither the LCD nor the USB part had
+been implemented), so there is not much value added by this board. Use the
+``ref405ep`` machine instead.
+
+``pc-i440fx-1.4`` up to ``pc-i440fx-1.7`` (since 7.0)
+'''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+These old machine types are quite neglected nowadays and thus might have
+various pitfalls with regards to live migration. Use a newer machine type
+instead.
+
 
 Backend options
 ---------------
@@ -307,6 +287,31 @@ full SCSI support.  Use virtio-scsi instead when SCSI passthrough is required.
 Note this also applies to ``-device virtio-blk-pci,scsi=on|off``, which is an
 alias.
 
+``-device sga`` (since 6.2)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``sga`` device loads an option ROM for x86 targets which enables
+SeaBIOS to send messages to the serial console. SeaBIOS 1.11.0 onwards
+contains native support for this feature and thus use of the option
+ROM approach is obsolete. The native SeaBIOS support can be activated
+by using ``-machine graphics=off``.
+
+``-device nvme-ns,eui64-default=on|off`` (since 7.1)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In QEMU versions 6.1, 6.2 and 7.0, the ``nvme-ns`` generates an EUI-64
+identifer that is not globally unique. If an EUI-64 identifer is required, the
+user must set it explicitly using the ``nvme-ns`` device parameter ``eui64``.
+
+``-device nvme,use-intel-id=on|off`` (since 7.1)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``nvme`` device originally used a PCI Vendor/Device Identifier combination
+from Intel that was not properly allocated. Since version 5.2, the controller
+has used a properly allocated identifier. Deprecate the ``use-intel-id``
+machine compatibility parameter.
+
+
 Block device options
 ''''''''''''''''''''
 
@@ -335,22 +340,12 @@ The above, converted to the current supported format::
 linux-user mode CPUs
 --------------------
 
-``ppc64abi32`` CPUs (since 5.2)
-'''''''''''''''''''''''''''''''
-
-The ``ppc64abi32`` architecture has a number of issues which regularly
-trip up our CI testing and is suspected to be quite broken. For that
-reason the maintainers strongly suspect no one actually uses it.
-
 MIPS ``I7200`` CPU (since 5.2)
 ''''''''''''''''''''''''''''''
 
 The ``I7200`` guest CPU relies on the nanoMIPS ISA, which is deprecated
 (the ISA has never been upstreamed to a compiler toolchain). Therefore
 this CPU is also deprecated.
-
-Related binaries
-----------------
 
 Backwards compatibility
 -----------------------
@@ -389,3 +384,20 @@ nanoMIPS ISA
 
 The ``nanoMIPS`` ISA has never been upstreamed to any compiler toolchain.
 As it is hard to generate binaries for it, declare it deprecated.
+
+Tools
+-----
+
+virtiofsd
+'''''''''
+
+There is a new Rust implementation of ``virtiofsd`` at
+``https://gitlab.com/virtio-fs/virtiofsd``;
+since this is now marked stable, new development should be done on that
+rather than the existing C version in the QEMU tree.
+The C version will still accept fixes and patches that
+are already in development for the moment, but will eventually
+be deleted from this tree.
+New deployments should use the Rust version, and existing systems
+should consider moving to it.  The command line and feature set
+is very close and moving should be simple.

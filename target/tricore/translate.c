@@ -246,7 +246,7 @@ static void gen_st_2regs_64(TCGv rh, TCGv rl, TCGv address, DisasContext *ctx)
     TCGv_i64 temp = tcg_temp_new_i64();
 
     tcg_gen_concat_i32_i64(temp, rl, rh);
-    tcg_gen_qemu_st_i64(temp, address, ctx->mem_idx, MO_LEQ);
+    tcg_gen_qemu_st_i64(temp, address, ctx->mem_idx, MO_LEUQ);
 
     tcg_temp_free_i64(temp);
 }
@@ -264,7 +264,7 @@ static void gen_ld_2regs_64(TCGv rh, TCGv rl, TCGv address, DisasContext *ctx)
 {
     TCGv_i64 temp = tcg_temp_new_i64();
 
-    tcg_gen_qemu_ld_i64(temp, address, ctx->mem_idx, MO_LEQ);
+    tcg_gen_qemu_ld_i64(temp, address, ctx->mem_idx, MO_LEUQ);
     /* write back to two 32 bit regs */
     tcg_gen_extr_i64_i32(rl, rh, temp);
 
@@ -8861,10 +8861,11 @@ static void tricore_tr_tb_stop(DisasContextBase *dcbase, CPUState *cpu)
     }
 }
 
-static void tricore_tr_disas_log(const DisasContextBase *dcbase, CPUState *cpu)
+static void tricore_tr_disas_log(const DisasContextBase *dcbase,
+                                 CPUState *cpu, FILE *logfile)
 {
-    qemu_log("IN: %s\n", lookup_symbol(dcbase->pc_first));
-    log_target_disas(cpu, dcbase->pc_first, dcbase->tb->size);
+    fprintf(logfile, "IN: %s\n", lookup_symbol(dcbase->pc_first));
+    target_disas(logfile, cpu, dcbase->pc_first, dcbase->tb->size);
 }
 
 static const TranslatorOps tricore_tr_ops = {

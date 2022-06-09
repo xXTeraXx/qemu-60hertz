@@ -97,7 +97,7 @@ static void pmac_ide_atapi_transfer_cb(void *opaque, int ret)
         /* Non-block ATAPI transfer - just copy to RAM */
         s->io_buffer_size = MIN(s->io_buffer_size, io->len);
         dma_memory_write(&address_space_memory, io->addr, s->io_buffer,
-                         s->io_buffer_size);
+                         s->io_buffer_size, MEMTXATTRS_UNSPECIFIED);
         io->len = 0;
         ide_atapi_cmd_ok(s);
         m->dma_active = false;
@@ -267,7 +267,9 @@ static uint64_t pmac_ide_read(void *opaque, hwaddr addr, unsigned size)
 
     switch (reg) {
     case 0x0:
-        if (size == 2) {
+        if (size == 1) {
+            retval = ide_data_readw(&d->bus, 0) & 0xFF;
+        } else if (size == 2) {
             retval = ide_data_readw(&d->bus, 0);
         } else if (size == 4) {
             retval = ide_data_readl(&d->bus, 0);

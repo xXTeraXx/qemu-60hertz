@@ -82,9 +82,13 @@ Emulated Devices
 .. toctree::
    :maxdepth: 1
 
+   devices/can.rst
+   devices/ccid.rst
+   devices/cxl.rst
    devices/ivshmem.rst
    devices/net.rst
    devices/nvme.rst
    devices/usb.rst
    devices/vhost-user.rst
    devices/virtio-pmem.rst
+   devices/vhost-user-rng.rst

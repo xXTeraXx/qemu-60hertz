@@ -33,6 +33,7 @@
 #include "qemu/module.h"
 #include "qemu/option.h"
 #include "qemu/bswap.h"
+#include "qemu/memalign.h"
 #include "migration/blocker.h"
 #include "qemu/cutils.h"
 #include <zlib.h>
@@ -60,6 +61,7 @@
 #define VMDK_ZEROED  (-3)
 
 #define BLOCK_OPT_ZEROED_GRAIN "zeroed_grain"
+#define BLOCK_OPT_TOOLSVERSION "toolsversion"
 
 typedef struct {
     uint32_t version;
@@ -175,6 +177,10 @@ typedef struct BDRVVmdkState {
     Error *migration_blocker;
     char *create_type;
 } BDRVVmdkState;
+
+typedef struct BDRVVmdkReopenState {
+    bool *extents_using_bs_file;
+} BDRVVmdkReopenState;
 
 typedef struct VmdkMetaData {
     unsigned int l1_index;
@@ -398,13 +404,61 @@ static int vmdk_is_cid_valid(BlockDriverState *bs)
     return 1;
 }
 
-/* We have nothing to do for VMDK reopen, stubs just return success */
 static int vmdk_reopen_prepare(BDRVReopenState *state,
                                BlockReopenQueue *queue, Error **errp)
 {
+    BDRVVmdkState *s;
+    BDRVVmdkReopenState *rs;
+    int i;
+
     assert(state != NULL);
     assert(state->bs != NULL);
+    assert(state->opaque == NULL);
+
+    s = state->bs->opaque;
+
+    rs = g_new0(BDRVVmdkReopenState, 1);
+    state->opaque = rs;
+
+    /*
+     * Check whether there are any extents stored in bs->file; if bs->file
+     * changes, we will need to update their .file pointers to follow suit
+     */
+    rs->extents_using_bs_file = g_new(bool, s->num_extents);
+    for (i = 0; i < s->num_extents; i++) {
+        rs->extents_using_bs_file[i] = s->extents[i].file == state->bs->file;
+    }
+
     return 0;
+}
+
+static void vmdk_reopen_clean(BDRVReopenState *state)
+{
+    BDRVVmdkReopenState *rs = state->opaque;
+
+    g_free(rs->extents_using_bs_file);
+    g_free(rs);
+    state->opaque = NULL;
+}
+
+static void vmdk_reopen_commit(BDRVReopenState *state)
+{
+    BDRVVmdkState *s = state->bs->opaque;
+    BDRVVmdkReopenState *rs = state->opaque;
+    int i;
+
+    for (i = 0; i < s->num_extents; i++) {
+        if (rs->extents_using_bs_file[i]) {
+            s->extents[i].file = state->bs->file;
+        }
+    }
+
+    vmdk_reopen_clean(state);
+}
+
+static void vmdk_reopen_abort(BDRVReopenState *state)
+{
+    vmdk_reopen_clean(state);
 }
 
 static int vmdk_parent_open(BlockDriverState *bs)
@@ -2344,6 +2398,7 @@ static int coroutine_fn vmdk_co_do_create(int64_t size,
                                           BlockdevVmdkAdapterType adapter_type,
                                           const char *backing_file,
                                           const char *hw_version,
+                                          const char *toolsversion,
                                           bool compat6,
                                           bool zeroed_grain,
                                           vmdk_create_extent_fn extent_fn,
@@ -2384,7 +2439,8 @@ static int coroutine_fn vmdk_co_do_create(int64_t size,
         "ddb.geometry.cylinders = \"%" PRId64 "\"\n"
         "ddb.geometry.heads = \"%" PRIu32 "\"\n"
         "ddb.geometry.sectors = \"63\"\n"
-        "ddb.adapterType = \"%s\"\n";
+        "ddb.adapterType = \"%s\"\n"
+        "ddb.toolsVersion = \"%s\"\n";
 
     ext_desc_lines = g_string_new(NULL);
 
@@ -2400,6 +2456,9 @@ static int coroutine_fn vmdk_co_do_create(int64_t size,
     }
     if (!hw_version) {
         hw_version = "4";
+    }
+    if (!toolsversion) {
+        toolsversion = "2147483647";
     }
 
     if (adapter_type != BLOCKDEV_VMDK_ADAPTER_TYPE_IDE) {
@@ -2525,7 +2584,8 @@ static int coroutine_fn vmdk_co_do_create(int64_t size,
                            size /
                                (int64_t)(63 * number_heads * BDRV_SECTOR_SIZE),
                            number_heads,
-                           BlockdevVmdkAdapterType_str(adapter_type));
+                           BlockdevVmdkAdapterType_str(adapter_type),
+                           toolsversion);
     desc_len = strlen(desc);
     /* the descriptor offset = 0x200 */
     if (!split && !flat) {
@@ -2617,6 +2677,7 @@ static int coroutine_fn vmdk_co_create_opts(BlockDriver *drv,
     BlockdevVmdkAdapterType adapter_type_enum;
     char *backing_file = NULL;
     char *hw_version = NULL;
+    char *toolsversion = NULL;
     char *fmt = NULL;
     BlockdevVmdkSubformat subformat;
     int ret = 0;
@@ -2649,6 +2710,7 @@ static int coroutine_fn vmdk_co_create_opts(BlockDriver *drv,
     adapter_type = qemu_opt_get_del(opts, BLOCK_OPT_ADAPTER_TYPE);
     backing_file = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FILE);
     hw_version = qemu_opt_get_del(opts, BLOCK_OPT_HWVERSION);
+    toolsversion = qemu_opt_get_del(opts, BLOCK_OPT_TOOLSVERSION);
     compat6 = qemu_opt_get_bool_del(opts, BLOCK_OPT_COMPAT6, false);
     if (strcmp(hw_version, "undefined") == 0) {
         g_free(hw_version);
@@ -2692,14 +2754,15 @@ static int coroutine_fn vmdk_co_create_opts(BlockDriver *drv,
         .opts = opts,
     };
     ret = vmdk_co_do_create(total_size, subformat, adapter_type_enum,
-                            backing_file, hw_version, compat6, zeroed_grain,
-                            vmdk_co_create_opts_cb, &data, errp);
+                            backing_file, hw_version, toolsversion, compat6,
+                            zeroed_grain, vmdk_co_create_opts_cb, &data, errp);
 
 exit:
     g_free(backing_fmt);
     g_free(adapter_type);
     g_free(backing_file);
     g_free(hw_version);
+    g_free(toolsversion);
     g_free(fmt);
     g_free(desc);
     g_free(path);
@@ -2782,6 +2845,7 @@ static int coroutine_fn vmdk_co_create(BlockdevCreateOptions *create_options,
                             opts->adapter_type,
                             opts->backing_file,
                             opts->hwversion,
+                            opts->toolsversion,
                             false,
                             opts->zeroed_grain,
                             vmdk_co_create_cb,
@@ -3032,6 +3096,11 @@ static QemuOptsList vmdk_create_opts = {
             .def_value_str = "undefined"
         },
         {
+            .name = BLOCK_OPT_TOOLSVERSION,
+            .type = QEMU_OPT_STRING,
+            .help = "VMware guest tools version",
+        },
+        {
             .name = BLOCK_OPT_SUBFMT,
             .type = QEMU_OPT_STRING,
             .help =
@@ -3055,6 +3124,8 @@ static BlockDriver bdrv_vmdk = {
     .bdrv_open                    = vmdk_open,
     .bdrv_co_check                = vmdk_co_check,
     .bdrv_reopen_prepare          = vmdk_reopen_prepare,
+    .bdrv_reopen_commit           = vmdk_reopen_commit,
+    .bdrv_reopen_abort            = vmdk_reopen_abort,
     .bdrv_child_perm              = bdrv_default_perms,
     .bdrv_co_preadv               = vmdk_co_preadv,
     .bdrv_co_pwritev              = vmdk_co_pwritev,

@@ -1047,7 +1047,7 @@ static void gen_load64(DisasContext *dc, TCGv_i64 dst, TCGv addr)
         cris_store_direct_jmp(dc);
     }
 
-    tcg_gen_qemu_ld_i64(dst, addr, mem_index, MO_TEQ);
+    tcg_gen_qemu_ld_i64(dst, addr, mem_index, MO_TEUQ);
 }
 
 static void gen_load(DisasContext *dc, TCGv dst, TCGv addr, 
@@ -3268,11 +3268,12 @@ static void cris_tr_tb_stop(DisasContextBase *dcbase, CPUState *cpu)
     }
 }
 
-static void cris_tr_disas_log(const DisasContextBase *dcbase, CPUState *cpu)
+static void cris_tr_disas_log(const DisasContextBase *dcbase,
+                              CPUState *cpu, FILE *logfile)
 {
     if (!DISAS_CRIS) {
-        qemu_log("IN: %s\n", lookup_symbol(dcbase->pc_first));
-        log_target_disas(cpu, dcbase->pc_first, dcbase->tb->size);
+        fprintf(logfile, "IN: %s\n", lookup_symbol(dcbase->pc_first));
+        target_disas(logfile, cpu, dcbase->pc_first, dcbase->tb->size);
     }
 }
 

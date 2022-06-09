@@ -143,9 +143,9 @@ static bool bp_wp_matches(ARMCPU *cpu, int n, bool is_wp)
      * Non-Secure to simplify the code slightly compared to the full
      * table in the ARM ARM.
      */
-    pac = extract64(cr, 1, 2);
-    hmc = extract64(cr, 13, 1);
-    ssc = extract64(cr, 14, 2);
+    pac = FIELD_EX64(cr, DBGWCR, PAC);
+    hmc = FIELD_EX64(cr, DBGWCR, HMC);
+    ssc = FIELD_EX64(cr, DBGWCR, SSC);
 
     switch (ssc) {
     case 0:
@@ -184,8 +184,8 @@ static bool bp_wp_matches(ARMCPU *cpu, int n, bool is_wp)
         g_assert_not_reached();
     }
 
-    wt = extract64(cr, 20, 1);
-    lbn = extract64(cr, 16, 4);
+    wt = FIELD_EX64(cr, DBGWCR, WT);
+    lbn = FIELD_EX64(cr, DBGWCR, LBN);
 
     if (wt && !linked_bp_matches(cpu, lbn)) {
         return false;
@@ -220,6 +220,7 @@ bool arm_debug_check_breakpoint(CPUState *cs)
 {
     ARMCPU *cpu = ARM_CPU(cs);
     CPUARMState *env = &cpu->env;
+    target_ulong pc;
     int n;
 
     /*
@@ -230,6 +231,28 @@ bool arm_debug_check_breakpoint(CPUState *cs)
         || !arm_generate_debug_exceptions(env)) {
         return false;
     }
+
+    /*
+     * Single-step exceptions have priority over breakpoint exceptions.
+     * If single-step state is active-pending, suppress the bp.
+     */
+    if (arm_singlestep_active(env) && !(env->pstate & PSTATE_SS)) {
+        return false;
+    }
+
+    /*
+     * PC alignment faults have priority over breakpoint exceptions.
+     */
+    pc = is_a64(env) ? env->pc : env->regs[15];
+    if ((is_a64(env) || !env->thumb) && (pc & 3) != 0) {
+        return false;
+    }
+
+    /*
+     * Instruction aborts have priority over breakpoint exceptions.
+     * TODO: We would need to look up the page for PC and verify that
+     * it is present and executable.
+     */
 
     for (n = 0; n < ARRAY_SIZE(env->cpu_breakpoint); n++) {
         if (bp_wp_matches(cpu, n, false)) {

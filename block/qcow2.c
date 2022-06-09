@@ -38,6 +38,7 @@
 #include "qemu/option_int.h"
 #include "qemu/cutils.h"
 #include "qemu/bswap.h"
+#include "qemu/memalign.h"
 #include "qapi/qobject-input-visitor.h"
 #include "qapi/qapi-visit-block-core.h"
 #include "crypto.h"
@@ -1295,7 +1296,8 @@ static int validate_compression_type(BDRVQcow2State *s, Error **errp)
 
 /* Called with s->lock held.  */
 static int coroutine_fn qcow2_do_open(BlockDriverState *bs, QDict *options,
-                                      int flags, Error **errp)
+                                      int flags, bool open_data_file,
+                                      Error **errp)
 {
     ERRP_GUARD();
     BDRVQcow2State *s = bs->opaque;
@@ -1613,50 +1615,52 @@ static int coroutine_fn qcow2_do_open(BlockDriverState *bs, QDict *options,
         goto fail;
     }
 
-    /* Open external data file */
-    s->data_file = bdrv_open_child(NULL, options, "data-file", bs,
-                                   &child_of_bds, BDRV_CHILD_DATA,
-                                   true, errp);
-    if (*errp) {
-        ret = -EINVAL;
-        goto fail;
-    }
+    if (open_data_file) {
+        /* Open external data file */
+        s->data_file = bdrv_open_child(NULL, options, "data-file", bs,
+                                       &child_of_bds, BDRV_CHILD_DATA,
+                                       true, errp);
+        if (*errp) {
+            ret = -EINVAL;
+            goto fail;
+        }
 
-    if (s->incompatible_features & QCOW2_INCOMPAT_DATA_FILE) {
-        if (!s->data_file && s->image_data_file) {
-            s->data_file = bdrv_open_child(s->image_data_file, options,
-                                           "data-file", bs, &child_of_bds,
-                                           BDRV_CHILD_DATA, false, errp);
+        if (s->incompatible_features & QCOW2_INCOMPAT_DATA_FILE) {
+            if (!s->data_file && s->image_data_file) {
+                s->data_file = bdrv_open_child(s->image_data_file, options,
+                                               "data-file", bs, &child_of_bds,
+                                               BDRV_CHILD_DATA, false, errp);
+                if (!s->data_file) {
+                    ret = -EINVAL;
+                    goto fail;
+                }
+            }
             if (!s->data_file) {
+                error_setg(errp, "'data-file' is required for this image");
                 ret = -EINVAL;
                 goto fail;
             }
-        }
-        if (!s->data_file) {
-            error_setg(errp, "'data-file' is required for this image");
-            ret = -EINVAL;
-            goto fail;
-        }
 
-        /* No data here */
-        bs->file->role &= ~BDRV_CHILD_DATA;
+            /* No data here */
+            bs->file->role &= ~BDRV_CHILD_DATA;
 
-        /* Must succeed because we have given up permissions if anything */
-        bdrv_child_refresh_perms(bs, bs->file, &error_abort);
-    } else {
-        if (s->data_file) {
-            error_setg(errp, "'data-file' can only be set for images with an "
-                             "external data file");
-            ret = -EINVAL;
-            goto fail;
-        }
+            /* Must succeed because we have given up permissions if anything */
+            bdrv_child_refresh_perms(bs, bs->file, &error_abort);
+        } else {
+            if (s->data_file) {
+                error_setg(errp, "'data-file' can only be set for images with "
+                                 "an external data file");
+                ret = -EINVAL;
+                goto fail;
+            }
 
-        s->data_file = bs->file;
+            s->data_file = bs->file;
 
-        if (data_file_is_raw(bs)) {
-            error_setg(errp, "data-file-raw requires a data file");
-            ret = -EINVAL;
-            goto fail;
+            if (data_file_is_raw(bs)) {
+                error_setg(errp, "data-file-raw requires a data file");
+                ret = -EINVAL;
+                goto fail;
+            }
         }
     }
 
@@ -1838,7 +1842,7 @@ static int coroutine_fn qcow2_do_open(BlockDriverState *bs, QDict *options,
 
  fail:
     g_free(s->image_data_file);
-    if (has_data_file(bs)) {
+    if (open_data_file && has_data_file(bs)) {
         bdrv_unref_child(bs, s->data_file);
         s->data_file = NULL;
     }
@@ -1875,7 +1879,8 @@ static void coroutine_fn qcow2_open_entry(void *opaque)
     BDRVQcow2State *s = qoc->bs->opaque;
 
     qemu_co_mutex_lock(&s->lock);
-    qoc->ret = qcow2_do_open(qoc->bs, qoc->options, qoc->flags, qoc->errp);
+    qoc->ret = qcow2_do_open(qoc->bs, qoc->options, qoc->flags, true,
+                             qoc->errp);
     qemu_co_mutex_unlock(&s->lock);
 }
 
@@ -2713,7 +2718,7 @@ static int qcow2_inactivate(BlockDriverState *bs)
     return result;
 }
 
-static void qcow2_close(BlockDriverState *bs)
+static void qcow2_do_close(BlockDriverState *bs, bool close_data_file)
 {
     BDRVQcow2State *s = bs->opaque;
     qemu_vfree(s->l1_table);
@@ -2739,7 +2744,7 @@ static void qcow2_close(BlockDriverState *bs)
     g_free(s->image_backing_file);
     g_free(s->image_backing_format);
 
-    if (has_data_file(bs)) {
+    if (close_data_file && has_data_file(bs)) {
         bdrv_unref_child(bs, s->data_file);
         s->data_file = NULL;
     }
@@ -2748,11 +2753,17 @@ static void qcow2_close(BlockDriverState *bs)
     qcow2_free_snapshots(bs);
 }
 
+static void qcow2_close(BlockDriverState *bs)
+{
+    qcow2_do_close(bs, true);
+}
+
 static void coroutine_fn qcow2_co_invalidate_cache(BlockDriverState *bs,
                                                    Error **errp)
 {
     ERRP_GUARD();
     BDRVQcow2State *s = bs->opaque;
+    BdrvChild *data_file;
     int flags = s->flags;
     QCryptoBlock *crypto = NULL;
     QDict *options;
@@ -2766,14 +2777,24 @@ static void coroutine_fn qcow2_co_invalidate_cache(BlockDriverState *bs,
     crypto = s->crypto;
     s->crypto = NULL;
 
-    qcow2_close(bs);
+    /*
+     * Do not reopen s->data_file (i.e., have qcow2_do_close() not close it,
+     * and then prevent qcow2_do_open() from opening it), because this function
+     * runs in the I/O path and as such we must not invoke global-state
+     * functions like bdrv_unref_child() and bdrv_open_child().
+     */
 
+    qcow2_do_close(bs, false);
+
+    data_file = s->data_file;
     memset(s, 0, sizeof(BDRVQcow2State));
+    s->data_file = data_file;
+
     options = qdict_clone_shallow(bs->options);
 
     flags &= ~BDRV_O_INACTIVE;
     qemu_co_mutex_lock(&s->lock);
-    ret = qcow2_do_open(bs, options, flags, errp);
+    ret = qcow2_do_open(bs, options, flags, false, errp);
     qemu_co_mutex_unlock(&s->lock);
     qobject_unref(options);
     if (ret < 0) {
@@ -5279,6 +5300,38 @@ static int qcow2_load_vmstate(BlockDriverState *bs, QEMUIOVector *qiov,
     return bs->drv->bdrv_co_preadv_part(bs, offset, qiov->size, qiov, 0, 0);
 }
 
+static int qcow2_has_compressed_clusters(BlockDriverState *bs)
+{
+    int64_t offset = 0;
+    int64_t bytes = bdrv_getlength(bs);
+
+    if (bytes < 0) {
+        return bytes;
+    }
+
+    while (bytes != 0) {
+        int ret;
+        QCow2SubclusterType type;
+        unsigned int cur_bytes = MIN(INT_MAX, bytes);
+        uint64_t host_offset;
+
+        ret = qcow2_get_host_offset(bs, offset, &cur_bytes, &host_offset,
+                                    &type);
+        if (ret < 0) {
+            return ret;
+        }
+
+        if (type == QCOW2_SUBCLUSTER_COMPRESSED) {
+            return 1;
+        }
+
+        offset += cur_bytes;
+        bytes -= cur_bytes;
+    }
+
+    return 0;
+}
+
 /*
  * Downgrades an image's version. To achieve this, any incompatible features
  * have to be removed.
@@ -5336,9 +5389,10 @@ static int qcow2_downgrade(BlockDriverState *bs, int target_version,
      * the first place; if that happens nonetheless, returning -ENOTSUP is the
      * best thing to do anyway */
 
-    if (s->incompatible_features) {
+    if (s->incompatible_features & ~QCOW2_INCOMPAT_COMPRESSION) {
         error_setg(errp, "Cannot downgrade an image with incompatible features "
-                   "%#" PRIx64 " set", s->incompatible_features);
+                   "0x%" PRIx64 " set",
+                   s->incompatible_features & ~QCOW2_INCOMPAT_COMPRESSION);
         return -ENOTSUP;
     }
 
@@ -5355,6 +5409,27 @@ static int qcow2_downgrade(BlockDriverState *bs, int target_version,
         error_setg_errno(errp, -ret, "Failed to turn zero into data clusters");
         return ret;
     }
+
+    if (s->incompatible_features & QCOW2_INCOMPAT_COMPRESSION) {
+        ret = qcow2_has_compressed_clusters(bs);
+        if (ret < 0) {
+            error_setg(errp, "Failed to check block status");
+            return -EINVAL;
+        }
+        if (ret) {
+            error_setg(errp, "Cannot downgrade an image with zstd compression "
+                       "type and existing compressed clusters");
+            return -ENOTSUP;
+        }
+        /*
+         * No compressed clusters for now, so just chose default zlib
+         * compression.
+         */
+        s->incompatible_features &= ~QCOW2_INCOMPAT_COMPRESSION;
+        s->compression_type = QCOW2_COMPRESSION_TYPE_ZLIB;
+    }
+
+    assert(s->incompatible_features == 0);
 
     s->qcow_version = target_version;
     ret = qcow2_update_header(bs);

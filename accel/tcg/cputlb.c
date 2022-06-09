@@ -783,6 +783,15 @@ static void tlb_flush_range_by_mmuidx_async_0(CPUState *cpu,
     }
     qemu_spin_unlock(&env_tlb(env)->c.lock);
 
+    /*
+     * If the length is larger than the jump cache size, then it will take
+     * longer to clear each entry individually than it will to clear it all.
+     */
+    if (d.len >= (TARGET_PAGE_SIZE * TB_JMP_CACHE_SIZE)) {
+        cpu_tb_jmp_cache_clear(cpu);
+        return;
+    }
+
     for (target_ulong i = 0; i < d.len; i += TARGET_PAGE_SIZE) {
         tb_flush_jmp_cache(cpu, d.addr + i);
     }
@@ -1752,13 +1761,15 @@ static void *atomic_mmu_lookup(CPUArchState *env, target_ulong addr,
                                MemOpIdx oi, int size, int prot,
                                uintptr_t retaddr)
 {
-    size_t mmu_idx = get_mmuidx(oi);
+    uintptr_t mmu_idx = get_mmuidx(oi);
     MemOp mop = get_memop(oi);
     int a_bits = get_alignment_bits(mop);
     uintptr_t index;
     CPUTLBEntry *tlbe;
     target_ulong tlb_addr;
     void *hostaddr;
+
+    tcg_debug_assert(mmu_idx < NB_MMU_MODES);
 
     /* Adjust the given return address.  */
     retaddr -= GETPC_ADJ;
@@ -1885,9 +1896,9 @@ load_memop(const void *haddr, MemOp op)
         return (uint32_t)ldl_be_p(haddr);
     case MO_LEUL:
         return (uint32_t)ldl_le_p(haddr);
-    case MO_BEQ:
+    case MO_BEUQ:
         return ldq_be_p(haddr);
-    case MO_LEQ:
+    case MO_LEUQ:
         return ldq_le_p(haddr);
     default:
         qemu_build_not_reached();
@@ -1899,24 +1910,30 @@ load_helper(CPUArchState *env, target_ulong addr, MemOpIdx oi,
             uintptr_t retaddr, MemOp op, bool code_read,
             FullLoadHelper *full_load)
 {
-    uintptr_t mmu_idx = get_mmuidx(oi);
-    uintptr_t index = tlb_index(env, mmu_idx, addr);
-    CPUTLBEntry *entry = tlb_entry(env, mmu_idx, addr);
-    target_ulong tlb_addr = code_read ? entry->addr_code : entry->addr_read;
     const size_t tlb_off = code_read ?
         offsetof(CPUTLBEntry, addr_code) : offsetof(CPUTLBEntry, addr_read);
     const MMUAccessType access_type =
         code_read ? MMU_INST_FETCH : MMU_DATA_LOAD;
-    unsigned a_bits = get_alignment_bits(get_memop(oi));
+    const unsigned a_bits = get_alignment_bits(get_memop(oi));
+    const size_t size = memop_size(op);
+    uintptr_t mmu_idx = get_mmuidx(oi);
+    uintptr_t index;
+    CPUTLBEntry *entry;
+    target_ulong tlb_addr;
     void *haddr;
     uint64_t res;
-    size_t size = memop_size(op);
+
+    tcg_debug_assert(mmu_idx < NB_MMU_MODES);
 
     /* Handle CPU specific unaligned behaviour */
     if (addr & ((1 << a_bits) - 1)) {
         cpu_unaligned_access(env_cpu(env), addr, access_type,
                              mmu_idx, retaddr);
     }
+
+    index = tlb_index(env, mmu_idx, addr);
+    entry = tlb_entry(env, mmu_idx, addr);
+    tlb_addr = code_read ? entry->addr_code : entry->addr_read;
 
     /* If the TLB entry is for a different page, reload and try again.  */
     if (!tlb_hit(tlb_addr, addr)) {
@@ -2081,16 +2098,16 @@ tcg_target_ulong helper_be_ldul_mmu(CPUArchState *env, target_ulong addr,
 uint64_t helper_le_ldq_mmu(CPUArchState *env, target_ulong addr,
                            MemOpIdx oi, uintptr_t retaddr)
 {
-    validate_memop(oi, MO_LEQ);
-    return load_helper(env, addr, oi, retaddr, MO_LEQ, false,
+    validate_memop(oi, MO_LEUQ);
+    return load_helper(env, addr, oi, retaddr, MO_LEUQ, false,
                        helper_le_ldq_mmu);
 }
 
 uint64_t helper_be_ldq_mmu(CPUArchState *env, target_ulong addr,
                            MemOpIdx oi, uintptr_t retaddr)
 {
-    validate_memop(oi, MO_BEQ);
-    return load_helper(env, addr, oi, retaddr, MO_BEQ, false,
+    validate_memop(oi, MO_BEUQ);
+    return load_helper(env, addr, oi, retaddr, MO_BEUQ, false,
                        helper_be_ldq_mmu);
 }
 
@@ -2140,7 +2157,6 @@ static inline uint64_t cpu_load_helper(CPUArchState *env, abi_ptr addr,
 {
     uint64_t ret;
 
-    trace_guest_ld_before_exec(env_cpu(env), addr, oi);
     ret = full_load(env, addr, oi, retaddr);
     qemu_plugin_vcpu_mem_cb(env_cpu(env), addr, oi, QEMU_PLUGIN_MEM_R);
     return ret;
@@ -2166,7 +2182,7 @@ uint32_t cpu_ldl_be_mmu(CPUArchState *env, abi_ptr addr,
 uint64_t cpu_ldq_be_mmu(CPUArchState *env, abi_ptr addr,
                         MemOpIdx oi, uintptr_t ra)
 {
-    return cpu_load_helper(env, addr, oi, MO_BEQ, helper_be_ldq_mmu);
+    return cpu_load_helper(env, addr, oi, ra, helper_be_ldq_mmu);
 }
 
 uint16_t cpu_ldw_le_mmu(CPUArchState *env, abi_ptr addr,
@@ -2210,10 +2226,10 @@ store_memop(void *haddr, uint64_t val, MemOp op)
     case MO_LEUL:
         stl_le_p(haddr, val);
         break;
-    case MO_BEQ:
+    case MO_BEUQ:
         stq_be_p(haddr, val);
         break;
-    case MO_LEQ:
+    case MO_LEUQ:
         stq_le_p(haddr, val);
         break;
     default:
@@ -2302,20 +2318,26 @@ static inline void QEMU_ALWAYS_INLINE
 store_helper(CPUArchState *env, target_ulong addr, uint64_t val,
              MemOpIdx oi, uintptr_t retaddr, MemOp op)
 {
-    uintptr_t mmu_idx = get_mmuidx(oi);
-    uintptr_t index = tlb_index(env, mmu_idx, addr);
-    CPUTLBEntry *entry = tlb_entry(env, mmu_idx, addr);
-    target_ulong tlb_addr = tlb_addr_write(entry);
     const size_t tlb_off = offsetof(CPUTLBEntry, addr_write);
-    unsigned a_bits = get_alignment_bits(get_memop(oi));
+    const unsigned a_bits = get_alignment_bits(get_memop(oi));
+    const size_t size = memop_size(op);
+    uintptr_t mmu_idx = get_mmuidx(oi);
+    uintptr_t index;
+    CPUTLBEntry *entry;
+    target_ulong tlb_addr;
     void *haddr;
-    size_t size = memop_size(op);
+
+    tcg_debug_assert(mmu_idx < NB_MMU_MODES);
 
     /* Handle CPU specific unaligned behaviour */
     if (addr & ((1 << a_bits) - 1)) {
         cpu_unaligned_access(env_cpu(env), addr, MMU_DATA_STORE,
                              mmu_idx, retaddr);
     }
+
+    index = tlb_index(env, mmu_idx, addr);
+    entry = tlb_entry(env, mmu_idx, addr);
+    tlb_addr = tlb_addr_write(entry);
 
     /* If the TLB entry is for a different page, reload and try again.  */
     if (!tlb_hit(tlb_addr, addr)) {
@@ -2465,15 +2487,15 @@ void helper_be_stl_mmu(CPUArchState *env, target_ulong addr, uint32_t val,
 void helper_le_stq_mmu(CPUArchState *env, target_ulong addr, uint64_t val,
                        MemOpIdx oi, uintptr_t retaddr)
 {
-    validate_memop(oi, MO_LEQ);
-    store_helper(env, addr, val, oi, retaddr, MO_LEQ);
+    validate_memop(oi, MO_LEUQ);
+    store_helper(env, addr, val, oi, retaddr, MO_LEUQ);
 }
 
 void helper_be_stq_mmu(CPUArchState *env, target_ulong addr, uint64_t val,
                        MemOpIdx oi, uintptr_t retaddr)
 {
-    validate_memop(oi, MO_BEQ);
-    store_helper(env, addr, val, oi, retaddr, MO_BEQ);
+    validate_memop(oi, MO_BEUQ);
+    store_helper(env, addr, val, oi, retaddr, MO_BEUQ);
 }
 
 /*
@@ -2487,7 +2509,6 @@ static inline void cpu_store_helper(CPUArchState *env, target_ulong addr,
                                     uint64_t val, MemOpIdx oi, uintptr_t ra,
                                     FullStoreHelper *full_store)
 {
-    trace_guest_st_before_exec(env_cpu(env), addr, oi);
     full_store(env, addr, val, oi, ra);
     qemu_plugin_vcpu_mem_cb(env_cpu(env), addr, oi, QEMU_PLUGIN_MEM_W);
 }
@@ -2545,7 +2566,6 @@ void cpu_stq_le_mmu(CPUArchState *env, target_ulong addr, uint64_t val,
     glue(glue(glue(cpu_atomic_ ## X, SUFFIX), END), _mmu)
 
 #define ATOMIC_MMU_CLEANUP
-#define ATOMIC_MMU_IDX   get_mmuidx(oi)
 
 #include "atomic_common.c.inc"
 
@@ -2609,11 +2629,11 @@ uint32_t cpu_ldl_code(CPUArchState *env, abi_ptr addr)
 static uint64_t full_ldq_code(CPUArchState *env, target_ulong addr,
                               MemOpIdx oi, uintptr_t retaddr)
 {
-    return load_helper(env, addr, oi, retaddr, MO_TEQ, true, full_ldq_code);
+    return load_helper(env, addr, oi, retaddr, MO_TEUQ, true, full_ldq_code);
 }
 
 uint64_t cpu_ldq_code(CPUArchState *env, abi_ptr addr)
 {
-    MemOpIdx oi = make_memop_idx(MO_TEQ, cpu_mmu_index(env, true));
+    MemOpIdx oi = make_memop_idx(MO_TEUQ, cpu_mmu_index(env, true));
     return full_ldq_code(env, addr, oi, 0);
 }

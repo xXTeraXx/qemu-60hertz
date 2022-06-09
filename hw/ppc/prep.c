@@ -255,13 +255,8 @@ static void ibm_40p_init(MachineState *machine)
         exit(1);
     }
 
-    if (env->flags & POWERPC_FLAG_RTC_CLK) {
-        /* POWER / PowerPC 601 RTC clock frequency is 7.8125 MHz */
-        cpu_ppc_tb_init(env, 7812500UL);
-    } else {
-        /* Set time-base frequency to 100 Mhz */
-        cpu_ppc_tb_init(env, 100UL * 1000UL * 1000UL);
-    }
+    /* Set time-base frequency to 100 Mhz */
+    cpu_ppc_tb_init(env, 100UL * 1000UL * 1000UL);
     qemu_register_reset(ppc_prep_reset, cpu);
 
     /* PCI host */
@@ -386,7 +381,7 @@ static void ibm_40p_init(MachineState *machine)
         }
         boot_device = 'm';
     } else {
-        boot_device = machine->boot_order[0];
+        boot_device = machine->boot_config.order[0];
     }
 
     fw_cfg_add_i16(fw_cfg, FW_CFG_MAX_CPUS, (uint16_t)machine->smp.max_cpus);

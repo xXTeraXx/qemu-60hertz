@@ -42,6 +42,7 @@
 #include "qemu/cutils.h"
 #include "hw/qdev-properties.h"
 #include "hw/clock.h"
+#include "hw/boards.h"
 
 /*
  * Aliases were a bad idea from the start.  Let's keep them
@@ -59,7 +60,8 @@ typedef struct QDevAlias
                               QEMU_ARCH_HPPA | QEMU_ARCH_I386 | \
                               QEMU_ARCH_MIPS | QEMU_ARCH_PPC |  \
                               QEMU_ARCH_RISCV | QEMU_ARCH_SH4 | \
-                              QEMU_ARCH_SPARC | QEMU_ARCH_XTENSA)
+                              QEMU_ARCH_SPARC | QEMU_ARCH_XTENSA | \
+                              QEMU_ARCH_LOONGARCH)
 #define QEMU_ARCH_VIRTIO_CCW (QEMU_ARCH_S390X)
 #define QEMU_ARCH_VIRTIO_MMIO (QEMU_ARCH_M68K)
 
@@ -82,6 +84,8 @@ static const QDevAlias qdev_alias_table[] = {
     { "virtio-gpu-device", "virtio-gpu", QEMU_ARCH_VIRTIO_MMIO },
     { "virtio-gpu-ccw", "virtio-gpu", QEMU_ARCH_VIRTIO_CCW },
     { "virtio-gpu-pci", "virtio-gpu", QEMU_ARCH_VIRTIO_PCI },
+    { "virtio-gpu-gl-device", "virtio-gpu-gl", QEMU_ARCH_VIRTIO_MMIO },
+    { "virtio-gpu-gl-pci", "virtio-gpu-gl", QEMU_ARCH_VIRTIO_PCI },
     { "virtio-input-host-device", "virtio-input-host", QEMU_ARCH_VIRTIO_MMIO },
     { "virtio-input-host-ccw", "virtio-input-host", QEMU_ARCH_VIRTIO_CCW },
     { "virtio-input-host-pci", "virtio-input-host", QEMU_ARCH_VIRTIO_PCI },
@@ -164,6 +168,7 @@ static void qdev_print_devinfos(bool show_no_user)
         [DEVICE_CATEGORY_SOUND]   = "Sound",
         [DEVICE_CATEGORY_MISC]    = "Misc",
         [DEVICE_CATEGORY_CPU]     = "CPU",
+        [DEVICE_CATEGORY_WATCHDOG]= "Watchdog",
         [DEVICE_CATEGORY_MAX]     = "Uncategorized",
     };
     GSList *list, *elt;
@@ -252,6 +257,16 @@ static DeviceClass *qdev_get_device_class(const char **driver, Error **errp)
         error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "driver",
                    "a pluggable device type");
         return NULL;
+    }
+
+    if (object_class_dynamic_cast(oc, TYPE_SYS_BUS_DEVICE)) {
+        /* sysbus devices need to be allowed by the machine */
+        MachineClass *mc = MACHINE_CLASS(object_get_class(qdev_get_machine()));
+        if (!device_type_is_dynamic_sysbus(mc, *driver)) {
+            error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "driver",
+                       "a dynamic sysbus device type for the machine");
+            return NULL;
+        }
     }
 
     return dc;
@@ -581,8 +596,8 @@ const char *qdev_set_id(DeviceState *dev, char *id, Error **errp)
         if (prop) {
             dev->id = id;
         } else {
-            g_free(id);
             error_setg(errp, "Duplicate device ID '%s'", id);
+            g_free(id);
             return NULL;
         }
     } else {
@@ -639,19 +654,13 @@ DeviceState *qdev_device_add_from_qdict(const QDict *opts,
         }
     }
 
-    if (qdict_haskey(opts, "failover_pair_id")) {
-        if (!qdict_haskey(opts, "id")) {
-            error_setg(errp, "Device with failover_pair_id don't have id");
-            return NULL;
+    if (qdev_should_hide_device(opts, from_json, errp)) {
+        if (bus && !qbus_is_hotpluggable(bus)) {
+            error_setg(errp, QERR_BUS_NO_HOTPLUG, bus->name);
         }
-        if (qdev_should_hide_device(opts, from_json, errp)) {
-            if (bus && !qbus_is_hotpluggable(bus)) {
-                error_setg(errp, QERR_BUS_NO_HOTPLUG, bus->name);
-            }
-            return NULL;
-        } else if (*errp) {
-            return NULL;
-        }
+        return NULL;
+    } else if (*errp) {
+        return NULL;
     }
 
     if (phase_check(PHASE_MACHINE_READY) && bus && !qbus_is_hotpluggable(bus)) {
@@ -865,14 +874,8 @@ void qmp_device_add(QDict *qdict, QObject **ret_data, Error **errp)
 
 static DeviceState *find_device_state(const char *id, Error **errp)
 {
-    Object *obj;
+    Object *obj = object_resolve_path_at(qdev_get_peripheral(), id);
     DeviceState *dev;
-
-    if (id[0] == '/') {
-        obj = object_resolve_path(id, NULL);
-    } else {
-        obj = object_resolve_path_component(qdev_get_peripheral(), id);
-    }
 
     if (!obj) {
         error_set(errp, ERROR_CLASS_DEVICE_NOT_FOUND,
@@ -937,7 +940,9 @@ void qmp_device_del(const char *id, Error **errp)
 {
     DeviceState *dev = find_device_state(id, errp);
     if (dev != NULL) {
-        if (dev->pending_deleted_event) {
+        if (dev->pending_deleted_event &&
+            (dev->pending_deleted_expires_ms == 0 ||
+             dev->pending_deleted_expires_ms > qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL))) {
             error_setg(errp, "Device %s is already in the "
                              "process of unplug", id);
             return;
@@ -968,6 +973,8 @@ BlockBackend *blk_by_qdev_id(const char *id, Error **errp)
 {
     DeviceState *dev;
     BlockBackend *blk;
+
+    GLOBAL_STATE_CODE();
 
     dev = find_device_state(id, errp);
     if (dev == NULL) {
@@ -1030,6 +1037,13 @@ int qemu_global_option(const char *str)
 
     opts = qemu_opts_parse_noisily(&qemu_global_opts, str, false);
     if (!opts) {
+        return -1;
+    }
+    if (!qemu_opt_get(opts, "driver")
+        || !qemu_opt_get(opts, "property")
+        || !qemu_opt_get(opts, "value")) {
+        error_report("options 'driver', 'property', and 'value'"
+                     " are required");
         return -1;
     }
 

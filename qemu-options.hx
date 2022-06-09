@@ -127,11 +127,11 @@ SRST
 ERST
 
 DEF("M", HAS_ARG, QEMU_OPTION_M,
-    "                sgx-epc.0.memdev=memid\n",
+    "                sgx-epc.0.memdev=memid,sgx-epc.0.node=numaid\n",
     QEMU_ARCH_ALL)
 
 SRST
-``sgx-epc.0.memdev=@var{memid}``
+``sgx-epc.0.memdev=@var{memid},sgx-epc.0.node=@var{numaid}``
     Define an SGX EPC section.
 ERST
 
@@ -206,17 +206,30 @@ SRST
 ERST
 
 DEF("smp", HAS_ARG, QEMU_OPTION_smp,
-    "-smp [[cpus=]n][,maxcpus=maxcpus][,sockets=sockets][,dies=dies][,cores=cores][,threads=threads]\n"
-    "                set the number of CPUs to 'n' [default=1]\n"
+    "-smp [[cpus=]n][,maxcpus=maxcpus][,sockets=sockets][,dies=dies][,clusters=clusters][,cores=cores][,threads=threads]\n"
+    "                set the number of initial CPUs to 'n' [default=1]\n"
     "                maxcpus= maximum number of total CPUs, including\n"
     "                offline CPUs for hotplug, etc\n"
-    "                sockets= number of discrete sockets in the system\n"
-    "                dies= number of CPU dies on one socket (for PC only)\n"
-    "                cores= number of CPU cores on one socket (for PC, it's on one die)\n"
-    "                threads= number of threads on one CPU core\n",
-        QEMU_ARCH_ALL)
+    "                sockets= number of sockets on the machine board\n"
+    "                dies= number of dies in one socket\n"
+    "                clusters= number of clusters in one die\n"
+    "                cores= number of cores in one cluster\n"
+    "                threads= number of threads in one core\n"
+    "Note: Different machines may have different subsets of the CPU topology\n"
+    "      parameters supported, so the actual meaning of the supported parameters\n"
+    "      will vary accordingly. For example, for a machine type that supports a\n"
+    "      three-level CPU hierarchy of sockets/cores/threads, the parameters will\n"
+    "      sequentially mean as below:\n"
+    "                sockets means the number of sockets on the machine board\n"
+    "                cores means the number of cores in one socket\n"
+    "                threads means the number of threads in one core\n"
+    "      For a particular machine type board, an expected CPU topology hierarchy\n"
+    "      can be defined through the supported sub-option. Unsupported parameters\n"
+    "      can also be provided in addition to the sub-option, but their values\n"
+    "      must be set as 1 in the purpose of correct parsing.\n",
+    QEMU_ARCH_ALL)
 SRST
-``-smp [[cpus=]n][,maxcpus=maxcpus][,sockets=sockets][,dies=dies][,cores=cores][,threads=threads]``
+``-smp [[cpus=]n][,maxcpus=maxcpus][,sockets=sockets][,dies=dies][,clusters=clusters][,cores=cores][,threads=threads]``
     Simulate a SMP system with '\ ``n``\ ' CPUs initially present on
     the machine type board. On boards supporting CPU hotplug, the optional
     '\ ``maxcpus``\ ' parameter can be set to enable further CPUs to be
@@ -225,27 +238,67 @@ SRST
     initial CPU count will match the maximum number. When only one of them
     is given then the omitted one will be set to its counterpart's value.
     Both parameters may be specified, but the maximum number of CPUs must
-    be equal to or greater than the initial CPU count. Both parameters are
-    subject to an upper limit that is determined by the specific machine
-    type chosen.
+    be equal to or greater than the initial CPU count. Product of the
+    CPU topology hierarchy must be equal to the maximum number of CPUs.
+    Both parameters are subject to an upper limit that is determined by
+    the specific machine type chosen.
 
-    To control reporting of CPU topology information, the number of sockets,
-    dies per socket, cores per die, and threads per core can be specified.
-    The sum `` sockets * cores * dies * threads `` must be equal to the
-    maximum CPU count. CPU targets may only support a subset of the topology
-    parameters. Where a CPU target does not support use of a particular
-    topology parameter, its value should be assumed to be 1 for the purpose
-    of computing the CPU maximum count.
+    To control reporting of CPU topology information, values of the topology
+    parameters can be specified. Machines may only support a subset of the
+    parameters and different machines may have different subsets supported
+    which vary depending on capacity of the corresponding CPU targets. So
+    for a particular machine type board, an expected topology hierarchy can
+    be defined through the supported sub-option. Unsupported parameters can
+    also be provided in addition to the sub-option, but their values must be
+    set as 1 in the purpose of correct parsing.
 
     Either the initial CPU count, or at least one of the topology parameters
     must be specified. The specified parameters must be greater than zero,
     explicit configuration like "cpus=0" is not allowed. Values for any
     omitted parameters will be computed from those which are given.
+
+    For example, the following sub-option defines a CPU topology hierarchy
+    (2 sockets totally on the machine, 2 cores per socket, 2 threads per
+    core) for a machine that only supports sockets/cores/threads.
+    Some members of the option can be omitted but their values will be
+    automatically computed:
+
+    ::
+
+        -smp 8,sockets=2,cores=2,threads=2,maxcpus=8
+
+    The following sub-option defines a CPU topology hierarchy (2 sockets
+    totally on the machine, 2 dies per socket, 2 cores per die, 2 threads
+    per core) for PC machines which support sockets/dies/cores/threads.
+    Some members of the option can be omitted but their values will be
+    automatically computed:
+
+    ::
+
+        -smp 16,sockets=2,dies=2,cores=2,threads=2,maxcpus=16
+
+    The following sub-option defines a CPU topology hierarchy (2 sockets
+    totally on the machine, 2 clusters per socket, 2 cores per cluster,
+    2 threads per core) for ARM virt machines which support sockets/clusters
+    /cores/threads. Some members of the option can be omitted but their values
+    will be automatically computed:
+
+    ::
+
+        -smp 16,sockets=2,clusters=2,cores=2,threads=2,maxcpus=16
+
     Historically preference was given to the coarsest topology parameters
     when computing missing values (ie sockets preferred over cores, which
     were preferred over threads), however, this behaviour is considered
     liable to change. Prior to 6.2 the preference was sockets over cores
     over threads. Since 6.2 the preference is cores over sockets over threads.
+
+    For example, the following option defines a machine board with 2 sockets
+    of 1 core before 6.2 and 1 socket of 2 cores after 6.2:
+
+    ::
+
+        -smp 2
 ERST
 
 DEF("numa", HAS_ARG, QEMU_OPTION_numa,
@@ -412,6 +465,44 @@ SRST
         -numa hmat-lb,initiator=0,target=1,hierarchy=memory,data-type=access-bandwidth,bandwidth=100M \
         -numa hmat-cache,node-id=0,size=10K,level=1,associativity=direct,policy=write-back,line=8 \
         -numa hmat-cache,node-id=1,size=10K,level=1,associativity=direct,policy=write-back,line=8
+ERST
+
+DEF("cxl-fixed-memory-window", HAS_ARG, QEMU_OPTION_cxl_fixed_memory_window,
+    "-cxl-fixed-memory-window targets.0=firsttarget,targets.1=secondtarget,size=size[,interleave-granularity=granularity]\n",
+    QEMU_ARCH_ALL)
+SRST
+``-cxl-fixed-memory-window targets.0=firsttarget,targets.1=secondtarget,size=size[,interleave-granularity=granularity]``
+    Define a CXL Fixed Memory Window (CFMW).
+
+    Described in the CXL 2.0 ECN: CEDT CFMWS & QTG _DSM.
+
+    They are regions of Host Physical Addresses (HPA) on a system which
+    may be interleaved across one or more CXL host bridges.  The system
+    software will assign particular devices into these windows and
+    configure the downstream Host-managed Device Memory (HDM) decoders
+    in root ports, switch ports and devices appropriately to meet the
+    interleave requirements before enabling the memory devices.
+
+    ``targets.X=firsttarget`` provides the mapping to CXL host bridges
+    which may be identified by the id provied in the -device entry.
+    Multiple entries are needed to specify all the targets when
+    the fixed memory window represents interleaved memory. X is the
+    target index from 0.
+
+    ``size=size`` sets the size of the CFMW. This must be a multiple of
+    256MiB. The region will be aligned to 256MiB but the location is
+    platform and configuration dependent.
+
+    ``interleave-granularity=granularity`` sets the granularity of
+    interleave. Default 256KiB. Only 256KiB, 512KiB, 1024KiB, 2048KiB
+    4096KiB, 8192KiB and 16384KiB granularities supported.
+
+    Example:
+
+    ::
+
+        -cxl-fixed-memory-window targets.0=cxl.0,targets.1=cxl.1,size=128G,interleave-granularity=512k
+
 ERST
 
 DEF("add-fd", HAS_ARG, QEMU_OPTION_add_fd,
@@ -608,6 +699,30 @@ SRST
     (deprecated) environment variables.
 ERST
 
+DEF("audio", HAS_ARG, QEMU_OPTION_audio,
+    "-audio [driver=]driver,model=value[,prop[=value][,...]]\n"
+    "                specifies the audio backend and device to use;\n"
+    "                apart from 'model', options are the same as for -audiodev.\n"
+    "                use '-audio model=help' to show possible devices.\n",
+    QEMU_ARCH_ALL)
+SRST
+``-audio [driver=]driver,model=value[,prop[=value][,...]]``
+    This option is a shortcut for configuring both the guest audio
+    hardware and the host audio backend in one go.
+    The host backend options are the same as with the corresponding
+    ``-audiodev`` options below. The guest hardware model can be set with
+    ``model=modelname``. Use ``model=help`` to list the available device
+    types.
+
+    The following two example do exactly the same, to show how ``-audio``
+    can be used to shorten the command line length:
+
+    .. parsed-literal::
+
+        |qemu_system| -audiodev pa,id=pa -device sb16,audiodev=pa
+        |qemu_system| -audio pa,model=sb16
+ERST
+
 DEF("audiodev", HAS_ARG, QEMU_OPTION_audiodev,
     "-audiodev [driver=]driver,id=id[,prop[=value][,...]]\n"
     "                specifies the audio backend to use\n"
@@ -659,6 +774,9 @@ DEF("audiodev", HAS_ARG, QEMU_OPTION_audiodev,
 #endif
 #ifdef CONFIG_SPICE
     "-audiodev spice,id=id[,prop[=value][,...]]\n"
+#endif
+#ifdef CONFIG_DBUS_DISPLAY
+    "-audiodev dbus,id=id[,prop[=value][,...]]\n"
 #endif
     "-audiodev wav,id=id[,prop[=value][,...]]\n"
     "                path= path of wav file to record\n",
@@ -834,33 +952,6 @@ SRST
     ``path=path``
         Write recorded audio into the specified file. Default is
         ``qemu.wav``.
-ERST
-
-DEF("soundhw", HAS_ARG, QEMU_OPTION_soundhw,
-    "-soundhw c1,... enable audio support\n"
-    "                and only specified sound cards (comma separated list)\n"
-    "                use '-soundhw help' to get the list of supported cards\n"
-    "                use '-soundhw all' to enable all of them\n", QEMU_ARCH_ALL)
-SRST
-``-soundhw card1[,card2,...] or -soundhw all``
-    Enable audio and selected sound hardware. Use 'help' to print all
-    available sound hardware. For example:
-
-    .. parsed-literal::
-
-        |qemu_system_x86| -soundhw sb16,adlib disk.img
-        |qemu_system_x86| -soundhw es1370 disk.img
-        |qemu_system_x86| -soundhw ac97 disk.img
-        |qemu_system_x86| -soundhw hda disk.img
-        |qemu_system_x86| -soundhw all disk.img
-        |qemu_system_x86| -soundhw help
-
-    Note that Linux's i810\_audio OSS kernel (for AC97) module might
-    require manually specifying clocking.
-
-    ::
-
-        modprobe i810_audio clocking=48000
 ERST
 
 DEF("device", HAS_ARG, QEMU_OPTION_device,
@@ -1321,7 +1412,7 @@ SRST
         the bus number and the unit id.
 
     ``index=index``
-        This option defines where is connected the drive by using an
+        This option defines where the drive is connected by using an
         index in the list of available connectors of a given interface
         type.
 
@@ -1847,8 +1938,8 @@ DEF("display", HAS_ARG, QEMU_OPTION_display,
     "-display spice-app[,gl=on|off]\n"
 #endif
 #if defined(CONFIG_SDL)
-    "-display sdl[,alt_grab=on|off][,ctrl_grab=on|off][,gl=on|core|es|off]\n"
-    "            [,grab-mod=<mod>][,show-cursor=on|off][,window-close=on|off]\n"
+    "-display sdl[,gl=on|core|es|off][,grab-mod=<mod>][,show-cursor=on|off]\n"
+    "            [,window-close=on|off]\n"
 #endif
 #if defined(CONFIG_GTK)
     "-display gtk[,full-screen=on|off][,gl=on|off][,grab-on-hover=on|off]\n"
@@ -1860,8 +1951,18 @@ DEF("display", HAS_ARG, QEMU_OPTION_display,
 #if defined(CONFIG_CURSES)
     "-display curses[,charset=<encoding>]\n"
 #endif
+#if defined(CONFIG_COCOA)
+    "-display cocoa[,full-grab=on|off][,swap-opt-cmd=on|off]\n"
+#endif
 #if defined(CONFIG_OPENGL)
     "-display egl-headless[,rendernode=<file>]\n"
+#endif
+#if defined(CONFIG_DBUS_DISPLAY)
+    "-display dbus[,addr=<dbusaddr>]\n"
+    "             [,gl=on|core|es|off][,rendernode=<file>]\n"
+#endif
+#if defined(CONFIG_COCOA)
+    "-display cocoa[,show-cursor=on|off][,left-command-key=on|off]\n"
 #endif
     "-display none\n"
     "                select display backend type\n"
@@ -1880,14 +1981,26 @@ DEF("display", HAS_ARG, QEMU_OPTION_display,
     , QEMU_ARCH_ALL)
 SRST
 ``-display type``
-    Select type of display to use. This option is a replacement for the
-    old style -sdl/-curses/... options. Use ``-display help`` to list
-    the available display types. Valid values for type are
+    Select type of display to use. Use ``-display help`` to list the available
+    display types. Valid values for type are
 
     ``spice-app[,gl=on|off]``
         Start QEMU as a Spice server and launch the default Spice client
         application. The Spice server will redirect the serial consoles
         and QEMU monitors. (Since 4.0)
+
+    ``dbus``
+        Export the display over D-Bus interfaces. (Since 7.0)
+
+        The connection is registered with the "org.qemu" name (and queued when
+        already owned).
+
+        ``addr=<dbusaddr>`` : D-Bus bus address to connect to.
+
+        ``p2p=yes|no`` : Use peer-to-peer connection, accepted via QMP ``add_client``.
+
+        ``gl=on|off|core|es`` : Use OpenGL for rendering (the D-Bus interface
+        will share framebuffers with DMABUF file descriptors).
 
     ``sdl``
         Display video output via SDL (usually in a separate graphics
@@ -1895,14 +2008,8 @@ SRST
         Valid parameters are:
 
         ``grab-mod=<mods>`` : Used to select the modifier keys for toggling
-        the mouse grabbing in conjunction with the "g" key. `<mods>` can be
-        either `lshift-lctrl-lalt` or `rctrl`.
-
-        ``alt_grab=on|off`` : Use Control+Alt+Shift-g to toggle mouse grabbing.
-        This parameter is deprecated - use ``grab-mod`` instead.
-
-        ``ctrl_grab=on|off`` : Use Right-Control-g to toggle mouse grabbing.
-        This parameter is deprecated - use ``grab-mod`` instead.
+        the mouse grabbing in conjunction with the "g" key. ``<mods>`` can be
+        either ``lshift-lctrl-lalt`` or ``rctrl``.
 
         ``gl=on|off|core|es`` : Use OpenGL for displaying
 
@@ -1936,6 +2043,15 @@ SRST
         ``charset=CP850`` for IBM CP850 encoding. The default is
         ``CP437``.
 
+    ``cocoa``
+        Display video output in a Cocoa window. Mac only. This interface
+        provides drop-down menus and other UI elements to configure and
+        control the VM during runtime. Valid parameters are:
+
+        ``show-cursor=on|off`` :  Force showing the mouse cursor
+
+        ``left-command-key=on|off`` : Disable forwarding left command key to host
+
     ``egl-headless[,rendernode=<file>]``
         Offload all OpenGL operations to a local DRI device. For any
         graphical display, this display needs to be paired with either
@@ -1968,55 +2084,7 @@ SRST
     Use C-a h for help on switching between the console and monitor.
 ERST
 
-DEF("curses", 0, QEMU_OPTION_curses,
-    "-curses         shorthand for -display curses\n",
-    QEMU_ARCH_ALL)
-SRST
-``-curses``
-    Normally, if QEMU is compiled with graphical window support, it
-    displays output such as guest graphics, guest console, and the QEMU
-    monitor in a window. With this option, QEMU can display the VGA
-    output when in text mode using a curses/ncurses interface. Nothing
-    is displayed in graphical mode.
-ERST
-
-DEF("alt-grab", 0, QEMU_OPTION_alt_grab,
-    "-alt-grab       use Ctrl-Alt-Shift to grab mouse (instead of Ctrl-Alt)\n",
-    QEMU_ARCH_ALL)
-SRST
-``-alt-grab``
-    Use Ctrl-Alt-Shift to grab mouse (instead of Ctrl-Alt). Note that
-    this also affects the special keys (for fullscreen, monitor-mode
-    switching, etc). This option is deprecated - please use
-    ``-display sdl,grab-mod=lshift-lctrl-lalt`` instead.
-ERST
-
-DEF("ctrl-grab", 0, QEMU_OPTION_ctrl_grab,
-    "-ctrl-grab      use Right-Ctrl to grab mouse (instead of Ctrl-Alt)\n",
-    QEMU_ARCH_ALL)
-SRST
-``-ctrl-grab``
-    Use Right-Ctrl to grab mouse (instead of Ctrl-Alt). Note that this
-    also affects the special keys (for fullscreen, monitor-mode
-    switching, etc). This option is deprecated - please use
-    ``-display sdl,grab-mod=rctrl`` instead.
-ERST
-
-DEF("no-quit", 0, QEMU_OPTION_no_quit,
-    "-no-quit        disable SDL/GTK window close capability (deprecated)\n", QEMU_ARCH_ALL)
-SRST
-``-no-quit``
-    Disable window close capability (SDL and GTK only). This option is
-    deprecated, please use ``-display ...,window-close=off`` instead.
-ERST
-
-DEF("sdl", 0, QEMU_OPTION_sdl,
-    "-sdl            shorthand for -display sdl\n", QEMU_ARCH_ALL)
-SRST
-``-sdl``
-    Enable SDL.
-ERST
-
+#ifdef CONFIG_SPICE
 DEF("spice", HAS_ARG, QEMU_OPTION_spice,
     "-spice [port=port][,tls-port=secured-port][,x509-dir=<dir>]\n"
     "       [,x509-key-file=<file>][,x509-key-password=<file>]\n"
@@ -2038,6 +2106,7 @@ DEF("spice", HAS_ARG, QEMU_OPTION_spice,
     "   enable spice\n"
     "   at least one of {port, tls-port} is mandatory\n",
     QEMU_ARCH_ALL)
+#endif
 SRST
 ``-spice option[,option[,...]]``
     Enable the spice remote desktop protocol. Valid options are
@@ -2472,6 +2541,7 @@ DEF("smbios", HAS_ARG, QEMU_OPTION_smbios,
     "                specify SMBIOS type 3 fields\n"
     "-smbios type=4[,sock_pfx=str][,manufacturer=str][,version=str][,serial=str]\n"
     "              [,asset=str][,part=str][,max-speed=%d][,current-speed=%d]\n"
+    "              [,processor-id=%d]\n"
     "                specify SMBIOS type 4 fields\n"
     "-smbios type=11[,value=str][,path=filename]\n"
     "                specify SMBIOS type 11 fields\n"
@@ -2497,7 +2567,7 @@ SRST
 ``-smbios type=3[,manufacturer=str][,version=str][,serial=str][,asset=str][,sku=str]``
     Specify SMBIOS type 3 fields
 
-``-smbios type=4[,sock_pfx=str][,manufacturer=str][,version=str][,serial=str][,asset=str][,part=str]``
+``-smbios type=4[,sock_pfx=str][,manufacturer=str][,version=str][,serial=str][,asset=str][,part=str][,processor-id=%d]``
     Specify SMBIOS type 4 fields
 
 ``-smbios type=11[,value=str][,path=filename]``
@@ -2678,6 +2748,25 @@ DEF("netdev", HAS_ARG, QEMU_OPTION_netdev,
     "-netdev vhost-vdpa,id=str,vhostdev=/path/to/dev\n"
     "                configure a vhost-vdpa network,Establish a vhost-vdpa netdev\n"
 #endif
+#ifdef CONFIG_VMNET
+    "-netdev vmnet-host,id=str[,isolated=on|off][,net-uuid=uuid]\n"
+    "         [,start-address=addr,end-address=addr,subnet-mask=mask]\n"
+    "                configure a vmnet network backend in host mode with ID 'str',\n"
+    "                isolate this interface from others with 'isolated',\n"
+    "                configure the address range and choose a subnet mask,\n"
+    "                specify network UUID 'uuid' to disable DHCP and interact with\n"
+    "                vmnet-host interfaces within this isolated network\n"
+    "-netdev vmnet-shared,id=str[,isolated=on|off][,nat66-prefix=addr]\n"
+    "         [,start-address=addr,end-address=addr,subnet-mask=mask]\n"
+    "                configure a vmnet network backend in shared mode with ID 'str',\n"
+    "                configure the address range and choose a subnet mask,\n"
+    "                set IPv6 ULA prefix (of length 64) to use for internal network,\n"
+    "                isolate this interface from others with 'isolated'\n"
+    "-netdev vmnet-bridged,id=str,ifname=name[,isolated=on|off]\n"
+    "                configure a vmnet network backend in bridged mode with ID 'str',\n"
+    "                use 'ifname=name' to select a physical network interface to be bridged,\n"
+    "                isolate this interface from others with 'isolated'\n"
+#endif
     "-netdev hubport,id=str,hubid=n[,netdev=nd]\n"
     "                configure a hub port on the hub with ID 'n'\n", QEMU_ARCH_ALL)
 DEF("nic", HAS_ARG, QEMU_OPTION_nic,
@@ -2696,6 +2785,9 @@ DEF("nic", HAS_ARG, QEMU_OPTION_nic,
 #endif
 #ifdef CONFIG_POSIX
     "vhost-user|"
+#endif
+#ifdef CONFIG_VMNET
+    "vmnet-host|vmnet-shared|vmnet-bridged|"
 #endif
     "socket][,option][,...][mac=macaddr]\n"
     "                initialize an on-board / default host NIC (using MAC address\n"
@@ -2718,6 +2810,9 @@ DEF("net", HAS_ARG, QEMU_OPTION_net,
 #endif
 #ifdef CONFIG_NETMAP
     "netmap|"
+#endif
+#ifdef CONFIG_VMNET
+    "vmnet-host|vmnet-shared|vmnet-bridged|"
 #endif
     "socket][,option][,option][,...]\n"
     "                old way to initialize a host network interface\n"
@@ -3641,7 +3736,9 @@ DEFHEADING(Debug/Expert options:)
 
 DEF("compat", HAS_ARG, QEMU_OPTION_compat,
     "-compat [deprecated-input=accept|reject|crash][,deprecated-output=accept|hide]\n"
-    "                Policy for handling deprecated management interfaces\n",
+    "                Policy for handling deprecated management interfaces\n"
+    "-compat [unstable-input=accept|reject|crash][,unstable-output=accept|hide]\n"
+    "                Policy for handling unstable management interfaces\n",
     QEMU_ARCH_ALL)
 SRST
 ``-compat [deprecated-input=@var{input-policy}][,deprecated-output=@var{output-policy}]``
@@ -3657,6 +3754,22 @@ SRST
         Emit deprecated command results and events
     ``deprecated-output=hide``
         Suppress deprecated command results and events
+
+    Limitation: covers only syntactic aspects of QMP.
+
+``-compat [unstable-input=@var{input-policy}][,unstable-output=@var{output-policy}]``
+    Set policy for handling unstable management interfaces (experimental):
+
+    ``unstable-input=accept`` (default)
+        Accept unstable commands and arguments
+    ``unstable-input=reject``
+        Reject unstable commands and arguments
+    ``unstable-input=crash``
+        Crash on unstable commands and arguments
+    ``unstable-output=accept`` (default)
+        Emit unstable command results and events
+    ``unstable-output=hide``
+        Suppress unstable command results and events
 
     Limitation: covers only syntactic aspects of QMP.
 ERST
@@ -4075,7 +4188,9 @@ SRST
 ERST
 
 DEF("enable-kvm", 0, QEMU_OPTION_enable_kvm, \
-    "-enable-kvm     enable KVM full virtualization support\n", QEMU_ARCH_ALL)
+    "-enable-kvm     enable KVM full virtualization support\n",
+    QEMU_ARCH_ARM | QEMU_ARCH_I386 | QEMU_ARCH_MIPS | QEMU_ARCH_PPC |
+    QEMU_ARCH_RISCV | QEMU_ARCH_S390X)
 SRST
 ``-enable-kvm``
     Enable KVM full virtualization support. This option is only
@@ -4083,16 +4198,17 @@ SRST
 ERST
 
 DEF("xen-domid", HAS_ARG, QEMU_OPTION_xen_domid,
-    "-xen-domid id   specify xen guest domain id\n", QEMU_ARCH_ALL)
+    "-xen-domid id   specify xen guest domain id\n",
+    QEMU_ARCH_ARM | QEMU_ARCH_I386)
 DEF("xen-attach", 0, QEMU_OPTION_xen_attach,
     "-xen-attach     attach to existing xen domain\n"
     "                libxl will use this when starting QEMU\n",
-    QEMU_ARCH_ALL)
+    QEMU_ARCH_ARM | QEMU_ARCH_I386)
 DEF("xen-domid-restrict", 0, QEMU_OPTION_xen_domid_restrict,
     "-xen-domid-restrict     restrict set of available xen operations\n"
     "                        to specified domain id. (Does not affect\n"
     "                        xenpv machine type).\n",
-    QEMU_ARCH_ALL)
+    QEMU_ARCH_ARM | QEMU_ARCH_I386)
 SRST
 ``-xen-domid id``
     Specify xen guest domain id (XEN only).
@@ -4521,17 +4637,13 @@ SRST
 ERST
 
 DEF("readconfig", HAS_ARG, QEMU_OPTION_readconfig,
-    "-readconfig <file>\n", QEMU_ARCH_ALL)
+    "-readconfig <file>\n"
+    "                read config file\n", QEMU_ARCH_ALL)
 SRST
 ``-readconfig file``
     Read device configuration from file. This approach is useful when
     you want to spawn QEMU process with many command line options but
     you don't want to exceed the command line character limit.
-ERST
-DEF("writeconfig", HAS_ARG, QEMU_OPTION_writeconfig,
-    "-writeconfig <file>\n"
-    "                read/write config file (deprecated)\n", QEMU_ARCH_ALL)
-SRST
 ERST
 
 DEF("no-user-config", 0, QEMU_OPTION_nouserconfig,
@@ -4571,16 +4683,6 @@ ERST
 HXCOMM Internal use
 DEF("qtest", HAS_ARG, QEMU_OPTION_qtest, "", QEMU_ARCH_ALL)
 DEF("qtest-log", HAS_ARG, QEMU_OPTION_qtest_log, "", QEMU_ARCH_ALL)
-
-#ifdef __linux__
-DEF("enable-fips", 0, QEMU_OPTION_enablefips,
-    "-enable-fips    enable FIPS 140-2 compliance\n",
-    QEMU_ARCH_ALL)
-#endif
-SRST
-``-enable-fips``
-    Enable FIPS 140-2 compliance mode.
-ERST
 
 DEF("msg", HAS_ARG, QEMU_OPTION_msg,
     "-msg [timestamp[=on|off]][,guest-name=[on|off]]\n"
@@ -5171,7 +5273,7 @@ SRST
                  -object secret,id=sec0,keyid=secmaster0,format=base64,\\
                      data=$SECRET,iv=$(<iv.b64)
 
-    ``-object sev-guest,id=id,cbitpos=cbitpos,reduced-phys-bits=val,[sev-device=string,policy=policy,handle=handle,dh-cert-file=file,session-file=file]``
+    ``-object sev-guest,id=id,cbitpos=cbitpos,reduced-phys-bits=val,[sev-device=string,policy=policy,handle=handle,dh-cert-file=file,session-file=file,kernel-hashes=on|off]``
         Create a Secure Encrypted Virtualization (SEV) guest object,
         which can be used to provide the guest memory encryption support
         on AMD processors.
@@ -5210,6 +5312,10 @@ SRST
         and session parameters are used for establishing a cryptographic
         session with the guest owner to negotiate keys used for
         attestation. The file must be encoded in base64.
+
+        The ``kernel-hashes`` adds the hashes of given kernel/initrd/
+        cmdline to a designated guest firmware page for measured Linux
+        boot with -kernel. The default is off. (Since 6.2)
 
         e.g to launch a SEV guest
 
